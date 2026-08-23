@@ -33,6 +33,7 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
       subjectId: query.subjectId,
       classId: query.classId,
       hasAccount: query.hasAccount,
+      includeArchived: query.includeArchived,
     },
     pagination,
     { sortBy: sort.sortBy, sortOrder: query.sortOrder ? sort.sortOrder : 'ASC' },
@@ -143,4 +144,10 @@ export const createAccount = asyncHandler(async (req: Request, res: Response) =>
   const teacher = await service.createAccount(Number(req.params.id), body, getAuditContext(req));
 
   return sendCreated(res, teacher, 'Teacher account created successfully');
+});
+
+export const restore = asyncHandler(async (req: Request, res: Response) => {
+  const restored = await service.restore(Number(req.params.id), getAuditContext(req));
+
+  return sendSuccess(res, restored, 'Teacher restored successfully');
 });

@@ -18,9 +18,21 @@ export const forgotPasswordSchema = z.object({
   email: emailSchema,
 });
 
+/** The emailed code: digits only, so a stray space or letter fails fast. */
+const resetCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4,10}$/, 'Enter the code from the email');
+
+export const verifyResetCodeSchema = z.object({
+  email: emailSchema,
+  code: resetCodeSchema,
+});
+
 export const resetPasswordSchema = z
   .object({
-    token: requiredString(256, 'Reset token'),
+    email: emailSchema,
+    code: resetCodeSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, 'Password confirmation is required'),
   })
@@ -57,6 +69,7 @@ export type RefreshBody = z.infer<typeof refreshSchema>;
 export type LogoutBody = z.infer<typeof logoutSchema>;
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordBody = z.infer<typeof resetPasswordSchema>;
+export type VerifyResetCodeBody = z.infer<typeof verifyResetCodeSchema>;
 export type ChangePasswordBody = z.infer<typeof changePasswordSchema>;
 export type VerifyEmailBody = z.infer<typeof verifyEmailSchema>;
 export type ResendVerificationBody = z.infer<typeof resendVerificationSchema>;

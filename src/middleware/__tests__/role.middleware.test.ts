@@ -44,7 +44,7 @@ describe('hasRole', () => {
   });
 
   it('is false when the user holds none of them', () => {
-    expect(hasRole(buildUser(), 'ACCOUNTANT')).toBe(false);
+    expect(hasRole(buildUser(), 'STUDENT')).toBe(false);
   });
 
   it('is false when no role is listed at all', () => {
@@ -69,7 +69,7 @@ describe('isElevated', () => {
     expect(isElevated(buildUser({ roles: [role] }))).toBe(true);
   });
 
-  it.each(['TEACHER', 'HOMEROOM_TEACHER', 'PARENT', 'STUDENT', 'ACCOUNTANT'] as const)(
+  it.each(['TEACHER', 'HOMEROOM_TEACHER', 'PARENT', 'STUDENT'] as const)(
     'is false for %s',
     (role) => {
       expect(isElevated(buildUser({ roles: [role] }))).toBe(false);

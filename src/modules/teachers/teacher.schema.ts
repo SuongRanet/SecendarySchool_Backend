@@ -58,6 +58,7 @@ export const listTeachersQuerySchema = paginationQuerySchema.extend({
   subjectId: z.coerce.number().int().positive().optional(),
   classId: z.coerce.number().int().positive().optional(),
   hasAccount: booleanQuerySchema,
+  includeArchived: booleanQuerySchema,
 });
 
 export const assignSubjectsSchema = z.object({

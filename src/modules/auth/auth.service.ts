@@ -4,6 +4,7 @@ import { withTransaction } from '../../database/connection';
 import { AppError } from '../../utils/app-error';
 import {
   durationToDate,
+  generateNumericCode,
   generateOpaqueToken,
   hashToken,
   signAccessToken,
@@ -11,6 +12,7 @@ import {
   verifyRefreshToken,
 } from '../../utils/jwt';
 import { logger } from '../../utils/logger';
+import { maskEmail, passwordResetCodeMail, sendMail } from '../../utils/mailer';
 import { hashPassword, verifyPassword } from '../../utils/password';
 import * as userRepository from '../users/user.repository';
 import * as auditService from '../audit/audit.service';
@@ -187,52 +189,143 @@ export const me = async (userId: number): Promise<AuthProfile> => loadProfile(us
  * The generated token is returned only outside production, where no mail
  * transport is configured.
  */
-export const forgotPassword = async (email: string): Promise<{ token?: string }> => {
+/**
+ * Starts a password reset.
+ *
+ * The reply is deliberately the same whether or not the address belongs to an
+ * account: telling an anonymous caller which addresses exist would turn this
+ * endpoint into a way to enumerate the school's users. The masked address in
+ * the reply is derived from what the caller typed, not from the database.
+ */
+export const forgotPassword = async (
+  email: string,
+): Promise<{ sentTo: string; code?: string }> => {
+  const sentTo = maskEmail(email);
   const user = await userRepository.findUserByEmail(email);
 
   if (!user || user.status === 'SUSPENDED') {
-    return {};
+    logger.info('Password reset requested for an address with no active account');
+
+    return { sentTo };
   }
 
-  const token = generateOpaqueToken();
+  const code = generateNumericCode(env.PASSWORD_RESET_CODE_LENGTH);
   const expiresAt = durationToDate(`${env.PASSWORD_RESET_TOKEN_TTL_MINUTES}m`);
 
+  // Only one code is live at a time: requesting a new one retires the old.
   await authRepository.invalidatePasswordResetTokens(user.id);
   await authRepository.insertPasswordResetToken({
     userId: user.id,
-    tokenHash: hashToken(token),
+    tokenHash: hashToken(`${user.id}:${code}`),
     expiresAt,
   });
 
-  logger.info('Password reset token issued', { userId: user.id, expiresAt });
+  const delivered = await sendMail({
+    to: user.email,
+    ...passwordResetCodeMail(code, env.PASSWORD_RESET_TOKEN_TTL_MINUTES),
+  });
 
-  return env.isProduction ? {} : { token };
+  logger.info('Password reset code issued', { userId: user.id, expiresAt, delivered });
+
+  // The code travels back to the caller only when the email could not be sent
+  // and this is not production — that is, when there is no mail server to read
+  // it from. As soon as SMTP is configured and working, the code lives in the
+  // inbox alone and never appears in the response or on screen.
+  if (delivered || env.isProduction) {
+    return { sentTo };
+  }
+
+  return { sentTo, code };
 };
 
+/**
+ * Finds the live reset request for an address and checks the code against it.
+ *
+ * A wrong code is counted. Once the attempt limit is reached the request is
+ * burned rather than merely rejected, so a six digit code cannot be walked
+ * through by repetition.
+ */
+const consumeResetCode = async (
+  email: string,
+  code: string,
+): Promise<{ id: number; userId: number }> => {
+  const invalid = () =>
+    AppError.badRequest('This code is invalid or has expired', 'INVALID_RESET_CODE');
+
+  const user = await userRepository.findUserByEmail(email);
+
+  if (!user) {
+    throw invalid();
+  }
+
+  const stored = await authRepository.findLivePasswordResetToken(user.id);
+
+  if (!stored || stored.used_at || stored.expires_at.getTime() < Date.now()) {
+    throw invalid();
+  }
+
+  if ((stored.attempts ?? 0) >= env.PASSWORD_RESET_MAX_ATTEMPTS) {
+    await authRepository.markPasswordResetTokenUsed(stored.id);
+    throw AppError.badRequest(
+      'Too many incorrect codes were entered. Request a new code.',
+      'RESET_CODE_ATTEMPTS_EXCEEDED',
+    );
+  }
+
+  if (stored.token_hash !== hashToken(`${user.id}:${code}`)) {
+    const attempts = await authRepository.recordPasswordResetAttempt(stored.id);
+
+    if (attempts >= env.PASSWORD_RESET_MAX_ATTEMPTS) {
+      await authRepository.markPasswordResetTokenUsed(stored.id);
+    }
+
+    throw invalid();
+  }
+
+  return { id: stored.id, userId: user.id };
+};
+
+/** Step two: confirm the code, before the person is asked for a new password. */
+export const verifyResetCode = async (
+  email: string,
+  code: string,
+): Promise<{ verified: true }> => {
+  const stored = await consumeResetCode(email, code);
+
+  await authRepository.markPasswordResetTokenVerified(stored.id);
+
+  return { verified: true };
+};
+
+/**
+ * Step three: set the new password.
+ *
+ * The code is checked again rather than trusting the verification step, so a
+ * caller cannot skip straight here. Every existing session is revoked: if the
+ * reset was prompted by someone else having the password, their session must
+ * not survive it.
+ */
 export const resetPassword = async (
-  token: string,
+  email: string,
+  code: string,
   newPassword: string,
   metadata: RequestMetadata,
 ): Promise<void> => {
-  const stored = await authRepository.findPasswordResetToken(hashToken(token));
-
-  if (!stored || stored.used_at || stored.expires_at.getTime() < Date.now()) {
-    throw AppError.badRequest('This reset link is invalid or has expired', 'INVALID_RESET_TOKEN');
-  }
+  const stored = await consumeResetCode(email, code);
 
   const passwordHash = await hashPassword(newPassword);
 
   await withTransaction(async (client) => {
-    await userRepository.updatePasswordHash(stored.user_id, passwordHash, client);
+    await userRepository.updatePasswordHash(stored.userId, passwordHash, client);
     await authRepository.markPasswordResetTokenUsed(stored.id, client);
-    await authRepository.revokeAllRefreshTokensForUser(stored.user_id, client);
+    await authRepository.revokeAllRefreshTokensForUser(stored.userId, client);
     await auditService.record(
       {
-        userId: stored.user_id,
+        userId: stored.userId,
         action: 'PASSWORD_RESET',
         entityType: 'user',
-        entityId: stored.user_id,
-        description: 'Password reset using a reset link',
+        entityId: stored.userId,
+        description: 'Password reset using an emailed code',
         ipAddress: metadata.ipAddress,
         userAgent: metadata.userAgent,
       },

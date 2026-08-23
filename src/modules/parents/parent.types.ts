@@ -50,6 +50,7 @@ export interface ParentDto {
   profilePhoto: string | null;
   isActive: boolean;
   childrenCount: number;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -92,6 +93,7 @@ export interface ParentFilters {
   isActive?: boolean;
   studentId?: number;
   hasAccount?: boolean;
+  includeArchived?: boolean;
 }
 
 export interface ParentChildRow {

@@ -64,6 +64,7 @@ export const listParentsQuerySchema = paginationQuerySchema.extend({
   isActive: booleanQuerySchema,
   studentId: z.coerce.number().int().positive().optional(),
   hasAccount: booleanQuerySchema,
+  includeArchived: booleanQuerySchema,
 });
 
 export const linkChildSchema = childLinkSchema;

@@ -16,7 +16,7 @@
  */
 import type { Application } from 'express';
 import request from 'supertest';
-import { describe } from 'vitest';
+import { afterAll, describe } from 'vitest';
 import { createApp } from '../app';
 import { env } from '../config';
 import { pool, query } from '../database/connection';
@@ -67,9 +67,29 @@ if (!apiTestable) {
 export const describeApi = apiTestable ? describe : describe.skip;
 
 /** Releases the connection pool so the vitest process can exit. */
+let poolClosed = false;
+
+/**
+ * Releases the connection pool.
+ *
+ * A pg pool cannot be reopened, so this must run once and only after every
+ * suite in the file is done. It used to be called from each suite's `afterAll`,
+ * which meant the first block to finish pulled the connection out from under
+ * the blocks that followed and they all failed with "Cannot use a pool after
+ * calling end on the pool". The file-level `afterAll` below is now the single
+ * caller; the guard keeps any remaining explicit call harmless.
+ */
 export const closeDatabase = async (): Promise<void> => {
+  if (poolClosed) {
+    return;
+  }
+
+  poolClosed = true;
   await pool.end().catch(() => undefined);
 };
+
+// Registered at import time, so it runs after every suite in the importing file.
+afterAll(closeDatabase);
 
 export interface Session {
   accessToken: string;
@@ -92,9 +112,12 @@ export const login = async (
     );
   }
 
+  // The login envelope nests the pair under `tokens`; reading them from the top
+  // level silently yielded undefined and every authenticated request came back
+  // 401, which went unnoticed because the suites skip without a database.
   return {
-    accessToken: response.body.data.accessToken,
-    refreshToken: response.body.data.refreshToken,
+    accessToken: response.body.data.tokens.accessToken,
+    refreshToken: response.body.data.tokens.refreshToken,
     userId: response.body.data.user.id,
   };
 };

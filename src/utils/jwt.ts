@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { SignOptions } from 'jsonwebtoken';
 import { env } from '../config';
@@ -57,6 +57,21 @@ export const verifyRefreshToken = (token: string): RefreshTokenPayload =>
 
 /** Generates a cryptographically random opaque token (reset / verification links). */
 export const generateOpaqueToken = (bytes = 48): string => randomBytes(bytes).toString('hex');
+
+/**
+ * A numeric one-time code, for something a person has to read off an email and
+ * type in. Drawn from `randomInt`, which is uniform and cryptographically
+ * sound — `Math.random()` would be neither.
+ */
+export const generateNumericCode = (length = 6): string => {
+  let code = '';
+
+  for (let index = 0; index < length; index += 1) {
+    code += String(randomInt(0, 10));
+  }
+
+  return code;
+};
 
 /** Only the hash of a token is ever persisted. */
 export const hashToken = (token: string): string =>

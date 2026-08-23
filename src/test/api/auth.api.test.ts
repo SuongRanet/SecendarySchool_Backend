@@ -1,11 +1,10 @@
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { env } from '../../config';
-import { asUser, closeDatabase, describeApi, getApp, login } from '../integration';
+import { asUser, describeApi, getApp, login } from '../integration';
 import type { Session } from '../integration';
 
 describeApi('POST /api/v1/auth/login', () => {
-  afterAll(closeDatabase);
 
   it('returns tokens and the signed-in user for correct credentials', async () => {
     const response = await request(getApp()).post('/api/v1/auth/login').send({
@@ -15,8 +14,8 @@ describeApi('POST /api/v1/auth/login', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(response.body.data.accessToken).toEqual(expect.any(String));
-    expect(response.body.data.refreshToken).toEqual(expect.any(String));
+    expect(response.body.data.tokens.accessToken).toEqual(expect.any(String));
+    expect(response.body.data.tokens.refreshToken).toEqual(expect.any(String));
     expect(response.body.data.user.username).toBe(env.SEED_SUPER_ADMIN_USERNAME);
     expect(response.body.data.user.roles).toContain('SUPER_ADMIN');
   });
@@ -75,7 +74,6 @@ describeApi('authenticated access', () => {
     session = await login();
   });
 
-  afterAll(closeDatabase);
 
   it('GET /auth/me returns the current user with roles and permissions', async () => {
     const response = await asUser(session).get('/api/v1/auth/me');
@@ -107,7 +105,7 @@ describeApi('authenticated access', () => {
       .send({ refreshToken: fresh.refreshToken });
 
     expect(first.status).toBe(200);
-    expect(first.body.data.accessToken).toEqual(expect.any(String));
+    expect(first.body.data.tokens.accessToken).toEqual(expect.any(String));
 
     const replay = await request(getApp())
       .post('/api/v1/auth/refresh')

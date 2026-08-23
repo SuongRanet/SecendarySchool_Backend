@@ -45,6 +45,8 @@ const toDto = (row: TeacherRow): TeacherDto => ({
   homeroomClassIds: row.homeroom_class_ids ?? [],
   classCount: row.class_count ?? 0,
   studentCount: row.student_count ?? 0,
+  // Exposed so a list showing archived records can mark them and offer a restore.
+  archivedAt: row.deleted_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -432,6 +434,32 @@ export const createAccount = async (
       },
       client,
     );
+  });
+
+  return getById(id);
+};
+
+/**
+ * Brings an archived teacher back into the active list.
+ *
+ * Archiving is reversible on purpose: it is a soft delete, and an administrator
+ * who archived the wrong person needs a way back that does not touch history.
+ */
+export const restore = async (id: number, context: AuditContext): Promise<TeacherDto> => {
+  const restored = await repository.restoreTeacher(id);
+
+  if (!restored) {
+    throw AppError.notFound('Archived teacher not found', 'TEACHER_NOT_FOUND');
+  }
+
+  await auditService.record({
+    userId: context.userId,
+    action: 'RESTORE',
+    entityType: 'teacher',
+    entityId: id,
+    description: 'Restored an archived teacher',
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
   });
 
   return getById(id);

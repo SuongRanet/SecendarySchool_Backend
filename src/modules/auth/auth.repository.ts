@@ -151,6 +151,8 @@ export interface OneTimeTokenRow {
   expires_at: Date;
   used_at: Date | null;
   created_at: Date;
+  attempts?: number;
+  verified_at?: Date | null;
 }
 
 export const insertPasswordResetToken = async (
@@ -173,6 +175,27 @@ export const findPasswordResetToken = async (
   );
 
   return result.rows[0] ?? null;
+};
+
+/** Counts a wrong code entry, so a short numeric code cannot be brute forced. */
+export const recordPasswordResetAttempt = async (
+  id: number,
+  executor: Queryable = pool,
+): Promise<number> => {
+  const result = await executor.query<{ attempts: number }>(
+    'UPDATE password_reset_tokens SET attempts = attempts + 1 WHERE id = $1 RETURNING attempts',
+    [id],
+  );
+
+  return result.rows[0]?.attempts ?? 0;
+};
+
+/** Marks the code as correctly entered; the new password may now be set. */
+export const markPasswordResetTokenVerified = async (
+  id: number,
+  executor: Queryable = pool,
+): Promise<void> => {
+  await executor.query('UPDATE password_reset_tokens SET verified_at = NOW() WHERE id = $1', [id]);
 };
 
 export const markPasswordResetTokenUsed = async (
@@ -223,4 +246,20 @@ export const markVerificationTokenUsed = async (
   executor: Queryable = pool,
 ): Promise<void> => {
   await executor.query('UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1', [id]);
+};
+
+/** The one live reset request for a user, if any. */
+export const findLivePasswordResetToken = async (
+  userId: number,
+  executor: Queryable = pool,
+): Promise<OneTimeTokenRow | null> => {
+  const result = await executor.query<OneTimeTokenRow>(
+    `SELECT * FROM password_reset_tokens
+      WHERE user_id = $1 AND used_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId],
+  );
+
+  return result.rows[0] ?? null;
 };

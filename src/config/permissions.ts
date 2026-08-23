@@ -391,16 +391,6 @@ const STUDENT_PERMISSIONS: PermissionCode[] = [
   PERMISSIONS.DASHBOARD_STUDENT,
 ];
 
-const ACCOUNTANT_PERMISSIONS: PermissionCode[] = [
-  PERMISSIONS.STUDENTS_VIEW,
-  PERMISSIONS.PARENTS_VIEW,
-  PERMISSIONS.CLASSES_VIEW,
-  PERMISSIONS.ENROLLMENTS_VIEW,
-  PERMISSIONS.ANNOUNCEMENTS_VIEW,
-  PERMISSIONS.NOTIFICATIONS_VIEW,
-  PERMISSIONS.REPORTS_VIEW,
-];
-
 export interface RoleDefinition {
   code: RoleCode;
   name: string;
@@ -441,7 +431,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   },
   {
     code: 'PARENT',
-    name: 'Parent / Guardian',
+    name: 'Parent',
     description: 'Monitors the academic progress of linked children.',
     permissions: PARENT_PERMISSIONS,
   },
@@ -450,12 +440,6 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     name: 'Student',
     description: 'Views own schedule, assignments, grades and attendance.',
     permissions: STUDENT_PERMISSIONS,
-  },
-  {
-    code: 'ACCOUNTANT',
-    name: 'Accountant',
-    description: 'Financial operations; expands when the finance module ships.',
-    permissions: ACCOUNTANT_PERMISSIONS,
   },
 ];
 

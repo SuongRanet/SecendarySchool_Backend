@@ -10,6 +10,7 @@ import type {
   RefreshBody,
   ResendVerificationBody,
   ResetPasswordBody,
+  VerifyResetCodeBody,
   VerifyEmailBody,
 } from './auth.schema';
 import * as authService from './auth.service';
@@ -56,14 +57,22 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
   return sendSuccess(
     res,
     result,
-    'If the email is registered, a password reset link has been issued',
+    'If the email is registered, a reset code has been sent',
   );
 });
 
-export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
-  const { token, password } = req.body as ResetPasswordBody;
+export const verifyResetCode = asyncHandler(async (req: Request, res: Response) => {
+  const { email, code } = req.body as VerifyResetCodeBody;
 
-  await authService.resetPassword(token, password, metadataOf(req));
+  const result = await authService.verifyResetCode(email, code);
+
+  return sendSuccess(res, result, 'Code confirmed');
+});
+
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { email, code, password } = req.body as ResetPasswordBody;
+
+  await authService.resetPassword(email, code, password, metadataOf(req));
 
   return sendNoContent(res, 'Password has been reset successfully');
 });

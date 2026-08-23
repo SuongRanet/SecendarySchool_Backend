@@ -58,6 +58,8 @@ const toDto = (row: StudentRow): StudentDto => ({
       }
     : null,
   parentCount: row.parent_count ?? 0,
+  // Exposed so a list showing archived records can mark them and offer a restore.
+  archivedAt: row.deleted_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });

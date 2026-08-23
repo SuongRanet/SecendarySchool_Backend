@@ -72,6 +72,7 @@ export interface StudentDto {
     academicYearName: string;
   } | null;
   parentCount: number;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

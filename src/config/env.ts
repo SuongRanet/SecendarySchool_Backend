@@ -35,6 +35,20 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 
+  // Outgoing mail. With no SMTP host configured the mailer logs the message
+  // instead of sending it, so development works without credentials.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: booleanFromString.default(false),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  MAIL_FROM_NAME: z.string().default('Hun Sen Turi Secondary School'),
+  MAIL_FROM_ADDRESS: z.string().optional(),
+
+  /** Length and lifetime of the emailed password reset code. */
+  PASSWORD_RESET_CODE_LENGTH: z.coerce.number().int().min(4).max(10).default(6),
+  PASSWORD_RESET_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
   SEED_SUPER_ADMIN_USERNAME: z.string().default('superadmin'),
@@ -59,6 +73,8 @@ export const env = {
   isDevelopment: raw.NODE_ENV === 'development',
   isProduction: raw.NODE_ENV === 'production',
   isTest: raw.NODE_ENV === 'test',
+  /** True when SMTP is configured; otherwise mail is written to the log. */
+  mailEnabled: Boolean(raw.SMTP_HOST && raw.SMTP_USER && raw.SMTP_PASSWORD),
   /** CORS_ORIGIN supports a comma separated list of allowed origins. */
   corsOrigins: raw.CORS_ORIGIN.split(',')
     .map((origin) => origin.trim())

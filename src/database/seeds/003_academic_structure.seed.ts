@@ -32,14 +32,23 @@ const SUBJECTS = [
   { code: 'PE', nameEn: 'Physical Education', nameKh: 'អប់រំកាយ', group: 'APPLIED', coefficient: 1 },
 ];
 
+/**
+ * One home room per class group. Hun Sen Turi runs four Grade 7 groups, four
+ * Grade 8 groups and three Grade 9 groups, and each keeps the same room all
+ * year, so the room code matches the class it belongs to.
+ */
 const ROOMS = [
-  { code: 'R101', name: 'Room 101', building: 'Main Building', floor: '1', capacity: 40 },
-  { code: 'R102', name: 'Room 102', building: 'Main Building', floor: '1', capacity: 40 },
-  { code: 'R103', name: 'Room 103', building: 'Main Building', floor: '1', capacity: 40 },
-  { code: 'R201', name: 'Room 201', building: 'Main Building', floor: '2', capacity: 40 },
-  { code: 'R202', name: 'Room 202', building: 'Main Building', floor: '2', capacity: 40 },
-  { code: 'LAB1', name: 'Computer Lab', building: 'Annex', floor: '1', capacity: 30 },
-  { code: 'GYM', name: 'Gymnasium', building: 'Annex', floor: '1', capacity: 80 },
+  { code: '7A', name: 'Room 7A', building: 'Main Building', floor: '1', capacity: 45 },
+  { code: '7B', name: 'Room 7B', building: 'Main Building', floor: '1', capacity: 45 },
+  { code: '7C', name: 'Room 7C', building: 'Main Building', floor: '1', capacity: 45 },
+  { code: '7D', name: 'Room 7D', building: 'Main Building', floor: '1', capacity: 45 },
+  { code: '8A', name: 'Room 8A', building: 'Main Building', floor: '2', capacity: 45 },
+  { code: '8B', name: 'Room 8B', building: 'Main Building', floor: '2', capacity: 45 },
+  { code: '8C', name: 'Room 8C', building: 'Main Building', floor: '2', capacity: 45 },
+  { code: '8D', name: 'Room 8D', building: 'Main Building', floor: '2', capacity: 45 },
+  { code: '9A', name: 'Room 9A', building: 'Main Building', floor: '3', capacity: 45 },
+  { code: '9B', name: 'Room 9B', building: 'Main Building', floor: '3', capacity: 45 },
+  { code: '9C', name: 'Room 9C', building: 'Main Building', floor: '3', capacity: 45 },
 ];
 
 /** Seeds the grade levels, subjects and rooms a primary school starts with. */
@@ -133,6 +142,32 @@ export const seedAcademicStructure = async (client: PoolClient): Promise<void> =
   if (stuckGrades.rowCount) {
     logger.warn(
       `These grade levels are outside the lower secondary curriculum but still have classes, so they were kept: ${stuckGrades.rows.map((row) => row.code).join(', ')}`,
+    );
+  }
+
+  // Rooms carried over from an earlier layout are removed, but only when no
+  // class and no timetable period still points at them.
+  const removedRooms = await client.query<{ code: string }>(
+    `DELETE FROM rooms
+      WHERE code <> ALL($1::text[])
+        AND NOT EXISTS (SELECT 1 FROM classes c WHERE c.room_id = rooms.id)
+        AND NOT EXISTS (SELECT 1 FROM schedules s WHERE s.room_id = rooms.id)
+      RETURNING code`,
+    [ROOMS.map((room) => room.code)],
+  );
+
+  const keptRooms = await client.query<{ code: string }>(
+    `SELECT code FROM rooms WHERE code <> ALL($1::text[])`,
+    [ROOMS.map((room) => room.code)],
+  );
+
+  if (removedRooms.rowCount) {
+    logger.info(`Removed ${removedRooms.rowCount} room(s) that are no longer part of the school`);
+  }
+
+  if (keptRooms.rowCount) {
+    logger.warn(
+      `These rooms are outside the current layout but are still in use, so they were kept: ${keptRooms.rows.map((row) => row.code).join(', ')}`,
     );
   }
 

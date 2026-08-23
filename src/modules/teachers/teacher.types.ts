@@ -56,6 +56,7 @@ export interface TeacherDto {
   homeroomClassIds: number[];
   classCount: number;
   studentCount: number;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -96,6 +97,7 @@ export interface TeacherFilters {
   subjectId?: number;
   classId?: number;
   hasAccount?: boolean;
+  includeArchived?: boolean;
 }
 
 export interface TeacherAssignmentRow {

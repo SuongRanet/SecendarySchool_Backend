@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { asUser, cleanup, closeDatabase, describeApi, login, unique } from '../integration';
+import { asUser, cleanup, describeApi, login, unique } from '../integration';
 import type { Session } from '../integration';
 import { createFixtures } from '../fixtures';
 import type { Fixtures } from '../fixtures';
@@ -18,7 +18,6 @@ describeApi('student and guardian API', () => {
   afterAll(async () => {
     await cleanup({ studentIds, parentIds });
     await fixtures.teardown();
-    await closeDatabase();
   });
 
   it('creates a student and allocates a student code', async () => {
@@ -137,14 +136,16 @@ describeApi('student and guardian API', () => {
     expect(link.status).toBeLessThan(300);
 
     const fromStudent = await asUser(session).get(`/api/v1/students/${studentIds[1]}/parents`);
-    expect(fromStudent.body.data.map((row: { id: number }) => row.id)).toContain(
+    expect(fromStudent.body.data.map((row: { parentId: number }) => row.parentId)).toContain(
       parent.body.data.id,
     );
 
     const fromParent = await asUser(session).get(
       `/api/v1/parents/${parent.body.data.id}/children`,
     );
-    expect(fromParent.body.data.map((row: { id: number }) => row.id)).toContain(studentIds[1]);
+    expect(fromParent.body.data.map((row: { studentId: number }) => row.studentId)).toContain(
+      studentIds[1],
+    );
   });
 
   it('lets one guardian hold several children', async () => {

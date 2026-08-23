@@ -2,7 +2,7 @@ import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams, SortParams } from '../../types';
 import { buildSearchPattern } from '../../utils/pagination';
-import { buildUpdateSet, ParamBuilder } from '../../utils/sql';
+import { ParamBuilder, buildUpdateSet, buildWhere } from '../../utils/sql';
 import type {
   CreateTeacherInput,
   TeacherAssignmentRow,
@@ -55,7 +55,9 @@ const EXTRA_SELECT = `
 `;
 
 const buildConditions = (filters: TeacherFilters, builder: ParamBuilder): string[] => {
-  const conditions = ['t.deleted_at IS NULL'];
+  // An archived teacher is hidden unless the caller asks for them, so the
+  // administrator can find someone they archived by mistake.
+  const conditions = filters.includeArchived ? [] : ['t.deleted_at IS NULL'];
 
   if (filters.status) {
     conditions.push(`t.status = ${builder.add(filters.status)}::staff_status`);
@@ -103,7 +105,10 @@ export const findTeachers = async (
   sort: SortParams<TeacherSortColumn>,
 ): Promise<PaginatedResult<TeacherRow>> => {
   const builder = new ParamBuilder();
-  const where = `WHERE ${buildConditions(filters, builder).join(' AND ')}`;
+  // buildWhere drops the keyword when nothing is being filtered. Interpolating
+  // `WHERE ${...}` directly produced a bare `WHERE` — and a SQL syntax error —
+  // as soon as the only condition, the not-archived one, was lifted.
+  const where = buildWhere(buildConditions(filters, builder));
 
   const totalResult = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int AS count FROM teachers t ${where}`,
@@ -431,4 +436,19 @@ export const countHomeroomClasses = async (
   );
 
   return result.rows[0]?.count ?? 0;
+};
+
+/** Brings an archived teacher back. Returns false when they were not archived. */
+export const restoreTeacher = async (
+  id: number,
+  executor: Queryable = pool,
+): Promise<boolean> => {
+  const result = await executor.query(
+    `UPDATE teachers
+        SET deleted_at = NULL, status = 'ACTIVE'
+      WHERE id = $1 AND deleted_at IS NOT NULL`,
+    [id],
+  );
+
+  return result.rowCount !== null && result.rowCount > 0;
 };

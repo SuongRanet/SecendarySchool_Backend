@@ -14,7 +14,6 @@ export const ROLE_CODES = [
   'HOMEROOM_TEACHER',
   'PARENT',
   'STUDENT',
-  'ACCOUNTANT',
 ] as const;
 export type RoleCode = (typeof ROLE_CODES)[number];
 

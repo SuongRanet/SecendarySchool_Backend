@@ -41,5 +41,33 @@ export const seedRolesAndPermissions = async (client: PoolClient): Promise<void>
     );
   }
 
+  // A role that has been dropped from the catalogue is removed, but only when
+  // nobody still holds it — an assigned role is kept and reported instead, so
+  // retiring a role can never silently strip someone's access.
+  const roleCodes = ROLE_DEFINITIONS.map((role) => role.code);
+
+  const removed = await client.query<{ code: string }>(
+    `DELETE FROM roles
+      WHERE code <> ALL($1::text[])
+        AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.role_id = roles.id)
+      RETURNING code`,
+    [roleCodes],
+  );
+
+  const stillAssigned = await client.query<{ code: string }>(
+    `SELECT code FROM roles WHERE code <> ALL($1::text[])`,
+    [roleCodes],
+  );
+
+  if (removed.rowCount) {
+    logger.info(`Removed ${removed.rowCount} role(s) no longer in the catalogue: ${removed.rows.map((row) => row.code).join(', ')}`);
+  }
+
+  if (stillAssigned.rowCount) {
+    logger.warn(
+      `These roles are no longer in the catalogue but are still assigned to a user, so they were kept: ${stillAssigned.rows.map((row) => row.code).join(', ')}`,
+    );
+  }
+
   logger.info(`Seeded ${ROLE_DEFINITIONS.length} roles with their permissions`);
 };

@@ -143,8 +143,12 @@ export const insertAnnouncement = async (
         END,
         COALESCE($9, FALSE), $8::timestamptz,
         CASE WHEN $7::boolean THEN NOW() ELSE NULL END,
-        $10::timestamptz, $11, $12,
-        CASE WHEN $7::boolean THEN $12 ELSE NULL END
+        $10::timestamptz, $11, $12::bigint,
+        -- $12 is the author. It fills created_by, and published_by as well when
+        -- the announcement goes out immediately. Both uses must name the type:
+        -- without the cast PostgreSQL deduces one type from the column and
+        -- another from the CASE branch and refuses the statement.
+        CASE WHEN $7::boolean THEN $12::bigint ELSE NULL END
      )
      RETURNING id`,
     [

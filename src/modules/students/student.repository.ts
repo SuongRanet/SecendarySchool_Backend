@@ -2,7 +2,7 @@ import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams, SortParams } from '../../types';
 import { buildSearchPattern } from '../../utils/pagination';
-import { buildUpdateSet, ParamBuilder } from '../../utils/sql';
+import { ParamBuilder, buildUpdateSet, buildWhere } from '../../utils/sql';
 import type {
   CreateStudentInput,
   StudentEnrollmentHistoryRow,
@@ -135,7 +135,10 @@ export const findStudents = async (
   sort: SortParams<StudentSortColumn>,
 ): Promise<PaginatedResult<StudentRow>> => {
   const builder = new ParamBuilder();
-  const where = `WHERE ${buildConditions(filters, builder).join(' AND ')}`;
+  // buildWhere drops the keyword when nothing is being filtered. Interpolating
+  // `WHERE ${...}` directly produced a bare `WHERE` — and a SQL syntax error —
+  // as soon as the only condition, the not-archived one, was lifted.
+  const where = buildWhere(buildConditions(filters, builder));
 
   const totalResult = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int AS count FROM students s ${where}`,

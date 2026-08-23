@@ -7,11 +7,24 @@
  * suite must never take over the active year of a database a developer is also
  * using by hand.
  */
+import { query } from '../database/connection';
 import { asUser, cleanup, unique } from './integration';
 import type { Session } from './integration';
 
 export interface Fixtures {
   suffix: string;
+  /** Calendar year the fixture's academic year starts in; dates derive from it. */
+  year: number;
+  /**
+   * Two dates that sit inside the fixture's academic year and are not in the
+   * future, plus the month around them. Attendance may only be recorded for a
+   * day that has already happened, so a suite that records attendance asks for
+   * `spanToday` and uses these instead of inventing dates.
+   */
+  dayOne: string;
+  dayTwo: string;
+  rangeFrom: string;
+  rangeTo: string;
   academicYearId: number;
   termId: number;
   gradeLevelId: number;
@@ -28,34 +41,121 @@ const expectCreated = (response: { status: number; body: unknown }, what: string
   }
 };
 
-export const createFixtures = async (session: Session): Promise<Fixtures> => {
+/**
+ * Academic years may not overlap, and a grade level's order is unique, so a
+ * fixture cannot reuse a fixed slot: one left behind by an interrupted run, or
+ * one belonging to a suite running alongside, would block every later fixture.
+ * Each fixture therefore claims its own far-future window and its own order,
+ * and retries on the small chance that two draws collide.
+ */
+const claimYear = (attempt: number): number =>
+  2100 + Math.floor(Math.random() * 300) + attempt * 7;
+
+/** Grade level order is capped at 20 by the API, and 7-9 belong to the school. */
+const claimLevelOrder = (attempt: number): number =>
+  10 + ((Math.floor(Math.random() * 11) + attempt) % 11);
+
+const iso = (date: Date): string => date.toISOString().slice(0, 10);
+
+const shiftDays = (days: number): string => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return iso(date);
+};
+
+export interface FixtureOptions {
+  /**
+   * Place the academic year around today rather than far in the future. Needed
+   * by any suite that records attendance, which the API refuses to accept for a
+   * date that has not happened yet.
+   */
+  spanToday?: boolean;
+}
+
+export const createFixtures = async (
+  session: Session,
+  options: FixtureOptions = {},
+): Promise<Fixtures> => {
   const api = asUser(session);
   const suffix = unique();
 
-  const yearResponse = await api.post('/api/v1/academic-years').send({
-    name: `Test Year ${suffix}`,
-    startDate: '2099-09-01',
-    endDate: '2100-07-31',
-  });
-  expectCreated(yearResponse, 'academic year');
-  const academicYearId: number = yearResponse.body.data.id;
+  let yearResponse;
+  let year = claimYear(0);
+
+  // Years may not overlap, and an interrupted run leaves its year behind, so
+  // every fixture clears the empty ones first. Only fixtures ever create a row
+  // named "Test Year ...", and one with no class and no enrolment is inert.
+  await query(
+    `DELETE FROM academic_years
+      WHERE name LIKE 'Test Year %'
+        AND NOT EXISTS (SELECT 1 FROM enrollments e WHERE e.academic_year_id = academic_years.id)
+        AND NOT EXISTS (SELECT 1 FROM classes c WHERE c.academic_year_id = academic_years.id)`,
+  );
+
+  // Grade level order is unique and capped at 20, so a handful of abandoned
+  // fixture grades is enough to exhaust every slot a new fixture can try.
+  await query(
+    `DELETE FROM grade_levels
+      WHERE name_en LIKE 'Test Grade %'
+        AND NOT EXISTS (SELECT 1 FROM classes c WHERE c.grade_level_id = grade_levels.id)`,
+  );
+
+  if (options.spanToday) {
+    const startDate = shiftDays(-180);
+    const endDate = shiftDays(180);
+    year = Number(startDate.slice(0, 4));
+
+    yearResponse = await api.post('/api/v1/academic-years').send({
+      name: `Test Year ${suffix}`,
+      startDate,
+      endDate,
+    });
+  } else {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      year = claimYear(attempt);
+
+      yearResponse = await api.post('/api/v1/academic-years').send({
+        name: `Test Year ${suffix}`,
+        startDate: `${year}-09-01`,
+        endDate: `${year + 1}-07-31`,
+      });
+
+      if (yearResponse.status === 201 || yearResponse.status === 200) {
+        break;
+      }
+    }
+  }
+
+  expectCreated(yearResponse as { status: number; body: unknown }, 'academic year');
+  const academicYearId: number = (yearResponse as { body: { data: { id: number } } }).body.data.id;
 
   const termResponse = await api.post(`/api/v1/academic-years/${academicYearId}/terms`).send({
     name: `Term 1 ${suffix}`,
     termOrder: 1,
-    startDate: '2099-09-01',
-    endDate: '2100-01-31',
+    startDate: options.spanToday ? shiftDays(-180) : `${year}-09-01`,
+    endDate: options.spanToday ? shiftDays(30) : `${year + 1}-01-31`,
   });
   expectCreated(termResponse, 'term');
   const termId: number = termResponse.body.data.id;
 
-  const gradeLevelResponse = await api.post('/api/v1/grade-levels').send({
-    code: `TG${suffix}`,
-    nameEn: `Test Grade ${suffix}`,
-    levelOrder: 19,
-  });
-  expectCreated(gradeLevelResponse, 'grade level');
-  const gradeLevelId: number = gradeLevelResponse.body.data.id;
+  let gradeLevelResponse;
+
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    gradeLevelResponse = await api.post('/api/v1/grade-levels').send({
+      code: `TG${suffix}`,
+      nameEn: `Test Grade ${suffix}`,
+      levelOrder: claimLevelOrder(attempt),
+    });
+
+    if (gradeLevelResponse.status === 201 || gradeLevelResponse.status === 200) {
+      break;
+    }
+  }
+
+  expectCreated(gradeLevelResponse as { status: number; body: unknown }, 'grade level');
+  const gradeLevelId: number = (gradeLevelResponse as { body: { data: { id: number } } }).body.data
+    .id;
 
   const subjectResponse = await api.post('/api/v1/subjects').send({
     code: `TS${suffix}`,
@@ -95,6 +195,11 @@ export const createFixtures = async (session: Session): Promise<Fixtures> => {
 
   return {
     suffix,
+    year,
+    dayOne: options.spanToday ? shiftDays(-2) : `${year}-09-07`,
+    dayTwo: options.spanToday ? shiftDays(-1) : `${year}-09-08`,
+    rangeFrom: options.spanToday ? shiftDays(-30) : `${year}-09-01`,
+    rangeTo: options.spanToday ? shiftDays(0) : `${year}-09-30`,
     academicYearId,
     termId,
     gradeLevelId,

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { asUser, cleanup, closeDatabase, describeApi, login } from '../integration';
+import { asUser, cleanup, describeApi, login } from '../integration';
 import type { Session } from '../integration';
 import { createEnrolledStudent, createFixtures } from '../fixtures';
 import type { Fixtures } from '../fixtures';
@@ -27,7 +27,6 @@ describeApi('enrollment API', () => {
   afterAll(async () => {
     await cleanup({ studentIds, classIds: [secondClassId] });
     await fixtures.teardown();
-    await closeDatabase();
   });
 
   it('enrolls a student into a class for a given academic year', async () => {
@@ -71,7 +70,7 @@ describeApi('enrollment API', () => {
 
     const transfer = await asUser(session)
       .post(`/api/v1/enrollments/${enrollmentId}/transfer`)
-      .send({ classId: secondClassId, effectiveDate: '2099-11-01' });
+      .send({ classId: secondClassId, effectiveDate: `${fixtures.year}-11-01` });
 
     expect(transfer.status).toBeLessThan(300);
 
@@ -96,7 +95,7 @@ describeApi('enrollment API', () => {
 
     const withdraw = await asUser(session)
       .post(`/api/v1/enrollments/${enrollmentId}/withdraw`)
-      .send({ endDate: '2099-12-01', status: 'WITHDRAWN' });
+      .send({ endDate: `${fixtures.year}-12-01`, status: 'WITHDRAWN' });
 
     expect(withdraw.status).toBeLessThan(300);
 
@@ -120,8 +119,8 @@ describeApi('enrollment API', () => {
   it('rejects an enrollment into a class of a different academic year', async () => {
     const otherYear = await asUser(session).post('/api/v1/academic-years').send({
       name: `Other Year ${fixtures.suffix}`,
-      startDate: '2100-09-01',
-      endDate: '2101-07-31',
+      startDate: `${fixtures.year + 1}-09-01`,
+      endDate: `${fixtures.year + 2}-07-31`,
     });
 
     const student = await asUser(session).post('/api/v1/students').send({
@@ -165,7 +164,6 @@ describeApi('schedule conflict detection', () => {
   afterAll(async () => {
     await cleanup({ scheduleIds, classIds: [secondClassId] });
     await fixtures.teardown();
-    await closeDatabase();
   });
 
   it('creates a lesson in a free slot', async () => {

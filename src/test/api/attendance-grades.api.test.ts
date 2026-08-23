@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { asUser, cleanup, closeDatabase, describeApi, login } from '../integration';
+import { asUser, cleanup, describeApi, login } from '../integration';
 import type { Session } from '../integration';
 import { createEnrolledStudent, createFixtures } from '../fixtures';
 import type { Fixtures } from '../fixtures';
@@ -14,7 +14,7 @@ describeApi('attendance API', () => {
 
   beforeAll(async () => {
     session = await login();
-    fixtures = await createFixtures(session);
+    fixtures = await createFixtures(session, { spanToday: true });
 
     studentId = (await createEnrolledStudent(session, fixtures, 'Present')).studentId;
     secondStudentId = (await createEnrolledStudent(session, fixtures, 'Absent')).studentId;
@@ -24,7 +24,6 @@ describeApi('attendance API', () => {
   afterAll(async () => {
     await cleanup({ attendanceIds, studentIds });
     await fixtures.teardown();
-    await closeDatabase();
   });
 
   it('records a daily register for a whole class', async () => {
@@ -32,7 +31,7 @@ describeApi('attendance API', () => {
       .post('/api/v1/attendance')
       .send({
         classId: fixtures.classId,
-        attendanceDate: '2099-09-07',
+        attendanceDate: fixtures.dayOne,
         entries: [
           { studentId, status: 'PRESENT' },
           { studentId: secondStudentId, status: 'ABSENT', note: 'Sick' },
@@ -49,16 +48,16 @@ describeApi('attendance API', () => {
 
   it('reads the register back through the attendance sheet', async () => {
     const response = await asUser(session).get(
-      `/api/v1/attendance/sheet?classId=${fixtures.classId}&date=2099-09-07`,
+      `/api/v1/attendance/sheet?classId=${fixtures.classId}&date=${fixtures.dayOne}`,
     );
 
     expect(response.status).toBe(200);
 
-    const entries = response.body.data.entries ?? response.body.data;
-    const marked = entries.filter(
-      (row: { status: string | null }) => row.status !== null && row.status !== undefined,
+    const marked = response.body.data.students.filter(
+      (row: { attendance: { status: string } | null }) => row.attendance !== null,
     );
 
+    expect(response.body.data.isRecorded).toBe(true);
     expect(marked.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -67,14 +66,14 @@ describeApi('attendance API', () => {
       .post('/api/v1/attendance')
       .send({
         classId: fixtures.classId,
-        attendanceDate: '2099-09-07',
+        attendanceDate: fixtures.dayOne,
         entries: [{ studentId: secondStudentId, status: 'LATE', minutesLate: 12 }],
       });
 
     expect(response.status).toBe(201);
 
     const list = await asUser(session).get(
-      `/api/v1/attendance?classId=${fixtures.classId}&dateFrom=2099-09-07&dateTo=2099-09-07&limit=50`,
+      `/api/v1/attendance?classId=${fixtures.classId}&dateFrom=${fixtures.dayOne}&dateTo=${fixtures.dayOne}&limit=50`,
     );
 
     expect(list.body.pagination.total).toBe(2);
@@ -101,7 +100,7 @@ describeApi('attendance API', () => {
       .post('/api/v1/attendance')
       .send({
         classId: fixtures.classId,
-        attendanceDate: '2099-09-08',
+        attendanceDate: fixtures.dayTwo,
         entries: [{ studentId, status: 'MAYBE' }],
       });
 
@@ -111,7 +110,7 @@ describeApi('attendance API', () => {
   it('rejects a register with no entries', async () => {
     const response = await asUser(session).post('/api/v1/attendance').send({
       classId: fixtures.classId,
-      attendanceDate: '2099-09-08',
+      attendanceDate: fixtures.dayTwo,
       entries: [],
     });
 
@@ -120,7 +119,7 @@ describeApi('attendance API', () => {
 
   it('summarises a student, counting a late arrival as attending', async () => {
     const response = await asUser(session).get(
-      `/api/v1/attendance/summary/student/${secondStudentId}?dateFrom=2099-09-01&dateTo=2099-09-30`,
+      `/api/v1/attendance/summary/student/${secondStudentId}?dateFrom=${fixtures.rangeFrom}&dateTo=${fixtures.rangeTo}`,
     );
 
     expect(response.status).toBe(200);
@@ -131,19 +130,20 @@ describeApi('attendance API', () => {
 
   it('summarises a class', async () => {
     const response = await asUser(session).get(
-      `/api/v1/attendance/summary/class/${fixtures.classId}?dateFrom=2099-09-01&dateTo=2099-09-30`,
+      `/api/v1/attendance/summary/class/${fixtures.classId}?dateFrom=${fixtures.rangeFrom}&dateTo=${fixtures.rangeTo}`,
     );
 
     expect(response.status).toBe(200);
-    expect(response.body.data.totalRecords).toBeGreaterThanOrEqual(2);
-    expect(response.body.data.attendanceRate).toBeGreaterThanOrEqual(0);
-    expect(response.body.data.attendanceRate).toBeLessThanOrEqual(100);
+    expect(response.body.data.summary.totalRecords).toBeGreaterThanOrEqual(2);
+    expect(response.body.data.summary.attendanceRate).toBeGreaterThanOrEqual(0);
+    expect(response.body.data.summary.attendanceRate).toBeLessThanOrEqual(100);
+    expect(Array.isArray(response.body.data.students)).toBe(true);
   });
 
   it('reports a daily trend for the academic year', async () => {
     const response = await asUser(session).get(
       `/api/v1/attendance/trend?academicYearId=${fixtures.academicYearId}` +
-        `&classId=${fixtures.classId}&dateFrom=2099-09-01&dateTo=2099-09-30`,
+        `&classId=${fixtures.classId}&dateFrom=${fixtures.rangeFrom}&dateTo=${fixtures.rangeTo}`,
     );
 
     expect(response.status).toBe(200);
@@ -168,7 +168,6 @@ describeApi('grade calculation API', () => {
   afterAll(async () => {
     await cleanup({ gradeIds, studentIds });
     await fixtures.teardown();
-    await closeDatabase();
   });
 
   const createAssessment = async (type: string, maxScore: number, score: number) => {
@@ -185,8 +184,10 @@ describeApi('grade calculation API', () => {
 
     expect(assessment.status).toBe(201);
 
+    // Marks are saved with PUT: the call replaces the result set for the
+    // assessment rather than appending to it.
     const results = await asUser(session)
-      .post(`/api/v1/assessments/${assessment.body.data.id}/results`)
+      .put(`/api/v1/assessments/${assessment.body.data.id}/results`)
       .send({ results: [{ studentId, score }] });
 
     expect(results.status).toBeLessThan(300);

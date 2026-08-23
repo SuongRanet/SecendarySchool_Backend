@@ -97,4 +97,11 @@ router.post(
   controller.createAccount,
 );
 
+router.post(
+  '/:id/restore',
+  requirePermissions(PERMISSIONS.TEACHERS_ARCHIVE),
+  validate({ params: idParamSchema }),
+  controller.restore,
+);
+
 export default router;

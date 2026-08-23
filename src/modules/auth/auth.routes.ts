@@ -9,6 +9,7 @@ import {
   refreshSchema,
   resendVerificationSchema,
   resetPasswordSchema,
+  verifyResetCodeSchema,
   verifyEmailSchema,
 } from './auth.schema';
 
@@ -22,6 +23,16 @@ router.post(
   authRateLimiter,
   validate({ body: forgotPasswordSchema }),
   authController.forgotPassword,
+);
+
+// Step two of the reset: confirm the emailed code before asking for a new
+// password, so the person is not made to type one only to be told the code was
+// wrong. Rate limited, because it is a guessable numeric code.
+router.post(
+  '/verify-reset-code',
+  authRateLimiter,
+  validate({ body: verifyResetCodeSchema }),
+  authController.verifyResetCode,
 );
 
 router.post(
