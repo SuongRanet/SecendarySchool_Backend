@@ -12,6 +12,7 @@ import type {
 import { AppError } from '../../utils/app-error';
 import * as auditService from '../audit/audit.service';
 import * as assessmentRepository from '../assessments/assessment.repository';
+import * as academicYearRepository from '../academic-years/academic-year.repository';
 import * as classRepository from '../classes/class.repository';
 import * as enrollmentRepository from '../enrollments/enrollment.repository';
 import * as teacherRepository from '../teachers/teacher.repository';
@@ -244,6 +245,28 @@ export const calculateForClass = async (
 };
 
 /** Calculates and persists the subject grades of a whole class. */
+/**
+ * Every grade belongs to a term.
+ *
+ * A caller that does not name one used to have its grades stored with no term
+ * at all, which produced a second, parallel set of grades sitting alongside the
+ * real ones — the same subject listed twice, once against the term and once
+ * against nothing. The school is always teaching some term, so resolve it
+ * rather than recording a grade that belongs to no part of the year.
+ */
+const resolveTermId = async (
+  academicYearId: number,
+  termId: number | null,
+): Promise<number | null> => {
+  if (termId) {
+    return termId;
+  }
+
+  const active = await academicYearRepository.findActiveTerm(academicYearId);
+
+  return active?.id ?? null;
+};
+
 export const generateForClass = async (
   classId: number,
   subjectId: number,
@@ -264,17 +287,50 @@ export const generateForClass = async (
     throw AppError.conflict('The academic year of this class is closed', 'ACADEMIC_YEAR_CLOSED');
   }
 
-  const calculated = await calculateForClass(classId, subjectId, termId);
+  const term = await resolveTermId(classRow.academic_year_id, termId);
+
+  /**
+   * Nothing to calculate is not the same as everyone scoring nothing.
+   *
+   * Generating a grade for a term with no assessment used to write one empty
+   * row per student — no score, no letter, yet a rank — which then showed up on
+   * report cards as though the subject had been graded. Refuse instead, and say
+   * which of the two things is missing so the teacher knows what to do next.
+   */
+  const readiness = await assessmentRepository.countForGrading(classId, subjectId, term);
+
+  if (readiness.assessments === 0) {
+    throw AppError.badRequest(
+      'No assessment has been recorded for this subject in this term, so there is nothing to grade yet',
+      'NO_ASSESSMENTS_TO_GRADE',
+    );
+  }
+
+  if (readiness.marked === 0) {
+    throw AppError.badRequest(
+      'The assessments for this subject have no marks entered yet, so there is nothing to grade',
+      'NO_MARKS_TO_GRADE',
+    );
+  }
+
+  const calculated = await calculateForClass(classId, subjectId, term);
   const { scheme } = await loadScheme();
   const enrolled = await enrollmentRepository.findActiveEnrollmentsByClass(classId);
   const enrollmentByStudent = new Map(enrolled.map((row) => [row.student_id, row.id]));
 
   await withTransaction(async (client) => {
     for (const entry of calculated) {
+      // A student with no marks in a subject that has been assessed has simply
+      // not been marked yet. Recording a blank grade for them would claim they
+      // were graded, so leave them out until a mark exists.
+      if (entry.percentage === null) {
+        continue;
+      }
+
       const existing = await repository.findGrade(
         entry.studentId,
         classRow.academic_year_id,
-        termId,
+        term,
         subjectId,
         client,
       );
@@ -284,7 +340,7 @@ export const generateForClass = async (
           studentId: entry.studentId,
           enrollmentId: enrollmentByStudent.get(entry.studentId) ?? null,
           academicYearId: classRow.academic_year_id,
-          termId,
+          termId: term,
           classId,
           subjectId,
           gradingSchemeId: scheme.id,
@@ -321,7 +377,7 @@ export const generateForClass = async (
       classId,
       subjectId,
       classRow.academic_year_id,
-      termId,
+      term,
       client,
     );
 
@@ -332,7 +388,7 @@ export const generateForClass = async (
         entityType: 'grade',
         entityId: classId,
         description: `Generated subject grades for ${classRow.name}`,
-        newValue: { classId, subjectId, termId, students: calculated.length, isFinal },
+        newValue: { classId, subjectId, termId: term, students: calculated.length, isFinal },
         ipAddress: context.ipAddress,
         userAgent: context.userAgent,
       },
@@ -344,7 +400,7 @@ export const generateForClass = async (
     classId,
     subjectId,
     academicYearId: classRow.academic_year_id,
-    termId: termId ?? undefined,
+    termId: term ?? undefined,
   });
 
   return rows.map(toDto);
@@ -391,7 +447,9 @@ export const saveGrade = async (
     }
   }
 
-  const termId = input.termId ?? null;
+  // A single saved mark belongs to a term for the same reason a generated one
+  // does; without this the manual entry screen produced the same orphan rows.
+  const termId = await resolveTermId(classRow.academic_year_id, input.termId ?? null);
   const { scheme, scales } = await loadScheme();
   const percentage =
     input.score === null || input.score === undefined

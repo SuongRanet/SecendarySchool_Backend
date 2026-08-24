@@ -77,6 +77,7 @@ export const listStudentsQuerySchema = paginationQuerySchema.extend({
   academicYearId: z.coerce.number().int().positive().optional(),
   parentId: z.coerce.number().int().positive().optional(),
   includeArchived: booleanQuerySchema,
+  unassigned: booleanQuerySchema,
 });
 
 export const linkParentSchema = parentLinkSchema;

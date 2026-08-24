@@ -78,6 +78,21 @@ const buildConditions = (filters: StudentFilters, builder: ParamBuilder): string
     conditions.push(`s.gender = ${builder.add(filters.gender)}::gender`);
   }
 
+  /**
+   * Students with no active enrolment.
+   *
+   * They exist but belong to no class, so they appear on no class list, no
+   * register and no grade sheet — created without an enrolment, or left behind
+   * when one was closed. Without a way to ask for them they are effectively
+   * invisible, which is how a student quietly goes missing.
+   */
+  if (filters.unassigned) {
+    conditions.push(
+      `NOT EXISTS (SELECT 1 FROM enrollments eu
+                    WHERE eu.student_id = s.id AND eu.status = 'ACTIVE')`,
+    );
+  }
+
   if (filters.classId !== undefined) {
     conditions.push(
       `EXISTS (SELECT 1 FROM enrollments e2

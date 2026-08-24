@@ -36,6 +36,7 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
     academicYearId: query.academicYearId,
     parentId: query.parentId,
     includeArchived: query.includeArchived,
+    unassigned: query.unassigned,
   });
 
   const result = await service.list(filters, pagination, {

@@ -1,7 +1,7 @@
 import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams } from '../../types';
-import { ParamBuilder } from '../../utils/sql';
+import { ParamBuilder, buildWhere } from '../../utils/sql';
 import type {
   GradeFilters,
   GradeHistoryEntry,
@@ -64,7 +64,9 @@ export const findGrades = async (
   pagination: PaginationParams,
 ): Promise<PaginatedResult<GradeRow>> => {
   const builder = new ParamBuilder();
-  const where = `WHERE ${buildConditions(filters, builder).join(' AND ')}`;
+  // Same rule as the other list queries: with no conditions this must not
+  // emit a bare WHERE, which is a syntax error rather than "match everything".
+  const where = buildWhere(buildConditions(filters, builder));
 
   const totalResult = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int AS count
@@ -259,12 +261,15 @@ export const recalculateRanks = async (
         SET rank_in_class = ranked.position
        FROM (
          SELECT id,
-                RANK() OVER (ORDER BY percentage DESC NULLS LAST) AS position
+                RANK() OVER (ORDER BY percentage DESC) AS position
            FROM grades
           WHERE class_id = $1
             AND subject_id = $2
             AND academic_year_id = $3
             AND COALESCE(term_id, 0) = COALESCE($4::bigint, 0)
+            -- A grade with no marks behind it is not a position in the class.
+            -- Ranking them put every unmarked student first.
+            AND percentage IS NOT NULL
        ) AS ranked
       WHERE g.id = ranked.id`,
     [classId, subjectId, academicYearId, termId],

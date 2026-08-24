@@ -309,3 +309,26 @@ export const deleteTerm = async (id: number, executor: Queryable = pool): Promis
   const result = await executor.query('DELETE FROM academic_terms WHERE id = $1', [id]);
   return result.rowCount !== null && result.rowCount > 0;
 };
+
+/**
+ * The term a school is currently teaching in a given year.
+ *
+ * Grading always belongs to a term, so anything that records a grade without
+ * being told which one falls back to this rather than storing a term-less row.
+ */
+export const findActiveTerm = async (
+  academicYearId: number,
+  executor: Queryable = pool,
+): Promise<AcademicTermRow | null> => {
+  const result = await executor.query<AcademicTermRow>(
+    `SELECT * FROM academic_terms
+      WHERE academic_year_id = $1
+      ORDER BY is_active DESC,
+               (CURRENT_DATE BETWEEN start_date AND end_date) DESC,
+               term_order ASC
+      LIMIT 1`,
+    [academicYearId],
+  );
+
+  return result.rows[0] ?? null;
+};

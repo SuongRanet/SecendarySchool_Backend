@@ -413,3 +413,34 @@ export const aggregateForGrade = async (
 
   return result.rows;
 };
+
+/**
+ * How many assessments a class subject has for a term, and how many carry at
+ * least one mark. Grading reads this before it writes anything: a term with no
+ * assessment has nothing to calculate, and saying so is far more useful than
+ * storing a row of empty grades.
+ */
+export const countForGrading = async (
+  classId: number,
+  subjectId: number,
+  termId: number | null,
+  executor: Queryable = pool,
+): Promise<{ assessments: number; marked: number }> => {
+  const result = await executor.query<{ assessments: number; marked: number }>(
+    `SELECT COUNT(*)::int AS assessments,
+            COUNT(*) FILTER (
+              WHERE EXISTS (
+                SELECT 1 FROM assessment_results r
+                 WHERE r.assessment_id = a.id AND (r.score IS NOT NULL OR r.is_absent)
+              )
+            )::int AS marked
+       FROM assessments a
+      WHERE a.class_id = $1
+        AND a.subject_id = $2
+        AND a.deleted_at IS NULL
+        AND (($3::bigint IS NULL) OR a.term_id = $3::bigint)`,
+    [classId, subjectId, termId],
+  );
+
+  return result.rows[0] ?? { assessments: 0, marked: 0 };
+};

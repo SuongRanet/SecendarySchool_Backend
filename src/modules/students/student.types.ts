@@ -131,6 +131,7 @@ export interface StudentFilters {
   parentId?: number;
   gender?: Gender;
   includeArchived?: boolean;
+  unassigned?: boolean;
 }
 
 export interface StudentParentRow {
