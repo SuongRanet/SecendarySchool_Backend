@@ -41,13 +41,16 @@ const toDto = (row: ScheduleRow): ScheduleDto => ({
   isActive: row.is_active,
 });
 
+/** Postgres hands back `07:00:00`; a timetable is read in hours and minutes. */
+const clock = (time: string): string => time.slice(0, 5);
+
 const CONFLICT_MESSAGES: Record<ScheduleConflict['kind'], (row: ScheduleRow) => string> = {
   TEACHER: (row) =>
-    `${row.teacher_name ?? 'This teacher'} already teaches ${row.subject_name} to ${row.class_name} at ${row.start_time}–${row.end_time}`,
+    `${row.teacher_name ?? 'This teacher'} already teaches ${row.subject_name} to ${row.class_name} at ${clock(row.start_time)}–${clock(row.end_time)}`,
   CLASS: (row) =>
-    `${row.class_name} already has ${row.subject_name} at ${row.start_time}–${row.end_time}`,
+    `${row.class_name} already has ${row.subject_name} at ${clock(row.start_time)}–${clock(row.end_time)}`,
   ROOM: (row) =>
-    `${row.room_name ?? 'This room'} is already used by ${row.class_name} at ${row.start_time}–${row.end_time}`,
+    `${row.room_name ?? 'This room'} is already used by ${row.class_name} at ${clock(row.start_time)}–${clock(row.end_time)}`,
 };
 
 const toConflict = (row: ScheduleRow & { conflict_kind: ScheduleConflict['kind'] }): ScheduleConflict => ({

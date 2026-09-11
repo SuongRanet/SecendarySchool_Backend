@@ -62,3 +62,34 @@ export class ParamBuilder {
     return this.values.length;
   }
 }
+
+/**
+ * The enrolment statuses that mean "this pupil held a place in this year".
+ *
+ * A year's own statistics must not shrink as the year is wound up. Promotion
+ * turns an enrolment into PROMOTED and graduation turns it into COMPLETED, so a
+ * chart that counts only ACTIVE rows shows a class of forty-six as empty the
+ * moment its pupils move up — which erases the year rather than describing it.
+ *
+ * TRANSFERRED and WITHDRAWN are deliberately absent: those pupils left the
+ * school part way through and did not finish the year with the class.
+ *
+ * Use this wherever a figure describes an academic year. Somewhere reporting on
+ * today — who is in class this morning, whose homework is due — still wants
+ * ACTIVE alone.
+ */
+export const ENROLLED_IN_YEAR = "('ACTIVE', 'COMPLETED', 'PROMOTED')";
+
+/**
+ * A scalar subquery for the academic year the school is currently in.
+ *
+ * Once the database holds more than one year, any figure that counts through
+ * `classes` or `class_subjects` without naming a year silently sums every year
+ * the school has ever run: a teacher who taught 8A last year and 8A this year
+ * shows as teaching two classes, and the subject count doubles.
+ *
+ * Queries that already receive an academic year should use that instead — this
+ * is for the ones whose signature has no year to pass, such as the teacher list,
+ * where "how many classes" can only sensibly mean "this year".
+ */
+export const ACTIVE_YEAR = '(SELECT id FROM academic_years WHERE is_active)';

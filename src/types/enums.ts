@@ -71,16 +71,32 @@ export type Weekday = (typeof WEEKDAYS)[number];
 export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'LEAVE'] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
-export const ASSESSMENT_TYPES = [
-  'HOMEWORK',
-  'QUIZ',
-  'ASSIGNMENT',
-  'PROJECT',
-  'MIDTERM',
-  'FINAL',
-  'PARTICIPATION',
-] as const;
+/**
+ * Every assessment type the database can hold.
+ *
+ * HOMEWORK is still here because three hundred and forty of them exist, they
+ * carry ten per cent of every subject grade, and the mark a teacher gives on the
+ * Homework page reaches the gradebook through one. It is simply no longer a
+ * thing anybody creates by hand — see CREATABLE_ASSESSMENT_TYPES.
+ *
+ * ASSIGNMENT, PROJECT and PARTICIPATION were never used by the school and have
+ * been dropped. The labels remain in the PostgreSQL enum because a value cannot
+ * be removed from one without rewriting every column that uses it, and an unused
+ * label costs nothing — the same decision taken for MOCK_NATIONAL in migration
+ * 015. Nothing can produce them any more.
+ */
+export const ASSESSMENT_TYPES = ['HOMEWORK', 'QUIZ', 'MIDTERM', 'FINAL'] as const;
 export type AssessmentType = (typeof ASSESSMENT_TYPES)[number];
+
+/**
+ * The types a person may choose when setting a new piece of work.
+ *
+ * The school assesses on quizzes, the midterm and the final. Homework is set
+ * through the Homework page, which creates its own assessment behind the
+ * scenes, so offering it here would let a teacher create a second, unlinked one.
+ */
+export const CREATABLE_ASSESSMENT_TYPES = ['QUIZ', 'MIDTERM', 'FINAL'] as const;
+export type CreatableAssessmentType = (typeof CREATABLE_ASSESSMENT_TYPES)[number];
 
 export const EXAM_TYPES = ['QUIZ', 'MONTHLY_TEST', 'MIDTERM', 'FINAL'] as const;
 export type ExamType = (typeof EXAM_TYPES)[number];
@@ -125,6 +141,8 @@ export const NOTIFICATION_TYPES = [
   'ANNOUNCEMENT',
   'ATTENDANCE_ALERT',
   'NEW_ASSIGNMENT',
+  'HOMEWORK_SUBMITTED',
+  'HOMEWORK_GRADED',
   'NEW_GRADE',
   'UPCOMING_EXAM',
   'PAYMENT_REMINDER',

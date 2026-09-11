@@ -101,7 +101,8 @@ export interface TeacherFilters {
 }
 
 export interface TeacherAssignmentRow {
-  class_subject_id: number;
+  /** Null on a homeroom class where this teacher teaches no subject. */
+  class_subject_id: number | null;
   class_id: number;
   class_name: string;
   class_code: string;
@@ -109,14 +110,15 @@ export interface TeacherAssignmentRow {
   academic_year_name: string;
   grade_level_id: number;
   grade_level_name: string;
-  subject_id: number;
-  subject_name: string;
+  subject_id: number | null;
+  subject_name: string | null;
   is_homeroom: boolean;
   student_count: number;
 }
 
 export interface TeacherAssignmentDto {
-  classSubjectId: number;
+  /** Null on a homeroom class where this teacher teaches no subject. */
+  classSubjectId: number | null;
   classId: number;
   className: string;
   classCode: string;
@@ -124,8 +126,8 @@ export interface TeacherAssignmentDto {
   academicYearName: string;
   gradeLevelId: number;
   gradeLevelName: string;
-  subjectId: number;
-  subjectName: string;
+  subjectId: number | null;
+  subjectName: string | null;
   isHomeroom: boolean;
   studentCount: number;
 }

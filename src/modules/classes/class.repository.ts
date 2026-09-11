@@ -266,13 +266,25 @@ const CLASS_SUBJECT_SELECT = `
     LEFT JOIN teachers t ON t.id = cs.teacher_id
 `;
 
+/**
+ * The subjects a class is taught, optionally narrowed to one teacher's own.
+ *
+ * Two different questions are asked of this. The class page wants the whole
+ * curriculum. A teacher opening a mark sheet wants the subjects they may
+ * actually write to — offering them the other nine is offering a dead end,
+ * because the service rejects the save afterwards.
+ */
 export const findClassSubjects = async (
   classId: number,
+  teacherId?: number,
   executor: Queryable = pool,
 ): Promise<ClassSubjectRow[]> => {
   const result = await executor.query<ClassSubjectRow>(
-    `${CLASS_SUBJECT_SELECT} WHERE cs.class_id = $1 ORDER BY s.name_en ASC`,
-    [classId],
+    `${CLASS_SUBJECT_SELECT}
+      WHERE cs.class_id = $1
+        AND ($2::bigint IS NULL OR cs.teacher_id = $2)
+      ORDER BY s.name_en ASC`,
+    [classId, teacherId ?? null],
   );
 
   return result.rows;
@@ -360,4 +372,21 @@ export const findClassStudents = async (
   );
 
   return result.rows;
+};
+
+/** The current assignment of one subject to one class, if it exists. */
+export const findClassSubjectPair = async (
+  classId: number,
+  subjectId: number,
+  executor: Queryable = pool,
+): Promise<ClassSubjectRow | null> => {
+  const result = await executor.query<ClassSubjectRow>(
+    `SELECT cs.*, s.name_en AS subject_name_en, s.name_kh AS subject_name_kh, s.code AS subject_code
+       FROM class_subjects cs
+       JOIN subjects s ON s.id = cs.subject_id
+      WHERE cs.class_id = $1 AND cs.subject_id = $2`,
+    [classId, subjectId],
+  );
+
+  return result.rows[0] ?? null;
 };

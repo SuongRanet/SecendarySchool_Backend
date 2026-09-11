@@ -68,6 +68,15 @@ export interface CreateAssignmentInput {
   classId: number;
   subjectId: number;
   termId?: number | null;
+  /**
+   * The teacher the homework belongs to.
+   *
+   * Optional because a teacher setting their own work is the ordinary case and
+   * the service fills it from the token. It matters when somebody else records
+   * the work — an administrator covering an absence — because the teacher on
+   * the assignment is who gets told when a pupil hands in.
+   */
+  teacherId?: number | null;
   title: string;
   description?: string | null;
   instructions?: string | null;

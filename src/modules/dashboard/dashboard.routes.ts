@@ -2,18 +2,23 @@ import { Router } from 'express';
 import { PERMISSIONS } from '../../config/permissions';
 import { authenticate, requirePermissions, validate } from '../../middleware';
 import * as controller from './dashboard.controller';
-import { termQuerySchema } from './dashboard.controller';
+import { dashboardQuerySchema } from './dashboard.controller';
 
 const router = Router();
 
 router.use(authenticate);
 
-router.get('/admin', requirePermissions(PERMISSIONS.DASHBOARD_ADMIN), controller.admin);
+router.get(
+  '/admin',
+  requirePermissions(PERMISSIONS.DASHBOARD_ADMIN),
+  validate({ query: dashboardQuerySchema }),
+  controller.admin,
+);
 
 router.get(
   '/principal',
   requirePermissions(PERMISSIONS.DASHBOARD_PRINCIPAL),
-  validate({ query: termQuerySchema }),
+  validate({ query: dashboardQuerySchema }),
   controller.principal,
 );
 

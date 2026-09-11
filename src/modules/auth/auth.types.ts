@@ -14,6 +14,8 @@ export interface AuthProfile {
   permissions: string[];
   fullName: string | null;
   profileType: 'TEACHER' | 'STUDENT' | 'PARENT' | null;
+  /** The school code the person is known by, shown to them on their profile. */
+  profileCode: string | null;
   teacherId: number | null;
   studentId: number | null;
   parentId: number | null;

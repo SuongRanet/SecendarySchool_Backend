@@ -21,6 +21,16 @@ export const createAssignmentSchema = z.object({
   dueDate: dateSchema,
   maxScore: z.union([z.coerce.number().positive().max(1000), z.null()]).optional(),
   publishNow: z.boolean().optional(),
+  /**
+   * Who the homework belongs to. Omitted when a teacher sets their own, which
+   * the service fills from the token.
+   *
+   * This was missing while the service had a field for it, and Zod strips what
+   * it does not declare — so homework recorded on a teacher's behalf was saved
+   * against nobody, silently, and there was then no one to tell when a pupil
+   * handed it in.
+   */
+  teacherId: z.coerce.number().int().positive().optional(),
 });
 
 export const updateAssignmentSchema = createAssignmentSchema

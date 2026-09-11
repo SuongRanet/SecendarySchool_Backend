@@ -6,7 +6,7 @@ import {
   paginationQuerySchema,
   requiredString,
 } from '../../schemas/common.schema';
-import { ASSESSMENT_TYPES } from '../../types/enums';
+import { ASSESSMENT_TYPES, CREATABLE_ASSESSMENT_TYPES } from '../../types/enums';
 
 export const createAssessmentSchema = z.object({
   classId: z.coerce.number().int().positive(),
@@ -15,15 +15,31 @@ export const createAssessmentSchema = z.object({
   teacherId: z.union([z.coerce.number().int().positive(), z.null()]).optional(),
   title: requiredString(200, 'Title'),
   description: nullableString(1000),
-  type: z.enum(ASSESSMENT_TYPES),
+  /*
+   * Only the three the school assesses on. Enforced here rather than only in the
+   * picker, because a rule that lives in a dropdown is not a rule.
+   *
+   * The list filter below still accepts every type, so the homework assessments
+   * already on file stay findable.
+   */
+  type: z.enum(CREATABLE_ASSESSMENT_TYPES),
   maxScore: z.coerce.number().positive().max(1000),
   weightPercent: z.union([z.coerce.number().positive().max(100), z.null()]).optional(),
   assessmentDate: optionalDateSchema,
   isPublished: z.boolean().optional(),
 });
 
+/**
+ * Editing keeps the full set of types.
+ *
+ * The restriction is on making a new assessment, not on saving one that already
+ * exists: three hundred and forty homework assessments are on file, and a rule
+ * that refused to save them would make every one of them uneditable and lose
+ * the marks behind them.
+ */
 export const updateAssessmentSchema = createAssessmentSchema
   .omit({ classId: true, subjectId: true })
+  .extend({ type: z.enum(ASSESSMENT_TYPES) })
   .partial()
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field must be provided',

@@ -5,6 +5,7 @@ import { buildYearPrefix, generateSequentialCode } from '../../utils/code-genera
 import { hashPassword } from '../../utils/password';
 import * as auditService from '../audit/audit.service';
 import * as userRepository from '../users/user.repository';
+import * as academicYearRepository from '../academic-years/academic-year.repository';
 import * as repository from './teacher.repository';
 import type { TeacherSortColumn } from './teacher.repository';
 import type {
@@ -355,6 +356,26 @@ export const listAssignments = async (
 
   const rows = await repository.findTeacherAssignments(id, academicYearId);
   return rows.map(toAssignmentDto);
+};
+
+/**
+ * The classes a teacher is teaching now, for their own workspace.
+ *
+ * Separate from `listAssignments` because the two questions differ. An
+ * administrator opening a teacher's record wants their history, and that page
+ * prints an academic-year column beside every row. A teacher opening "My
+ * Classes" wants this year: unscoped, they were shown last year's 8A beside
+ * this year's, every class counted twice, and the register could be opened on a
+ * class that finished a year ago.
+ */
+export const listMyAssignments = async (
+  id: number,
+  academicYearId?: number,
+): Promise<TeacherAssignmentDto[]> => {
+  const year =
+    academicYearId ?? (await academicYearRepository.findActiveAcademicYear())?.id ?? undefined;
+
+  return listAssignments(id, year);
 };
 
 export const listSchedule = async (

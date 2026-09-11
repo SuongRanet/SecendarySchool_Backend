@@ -36,7 +36,8 @@ const PROFILE_SELECT = `
     WHEN s.id IS NOT NULL THEN 'STUDENT'
     WHEN p.id IS NOT NULL THEN 'PARENT'
     ELSE NULL
-  END AS profile_type
+  END AS profile_type,
+  COALESCE(t.teacher_code, s.student_code, p.parent_code) AS profile_code
 `;
 
 const ROLES_SELECT = `

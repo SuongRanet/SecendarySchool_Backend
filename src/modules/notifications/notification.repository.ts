@@ -211,15 +211,34 @@ export const findForUser = async (
   return { rows: rows.rows, total: totalResult.rows[0]?.count ?? 0 };
 };
 
-export const countUnread = async (userId: number): Promise<number> => {
-  const result = await pool.query<{ count: number }>(
-    `SELECT COUNT(*)::int AS count
-       FROM notification_recipients
-      WHERE user_id = $1 AND read_at IS NULL AND archived_at IS NULL`,
+/**
+ * Unread totals, broken down by type as well as summed.
+ *
+ * One query rather than one per badge. The bell wants the total; the Homework
+ * item in the sidebar wants only the homework types, and asking separately for
+ * each would put a request on the wire for every badge on the screen.
+ */
+export const countUnread = async (
+  userId: number,
+): Promise<{ total: number; byType: Record<string, number> }> => {
+  const result = await pool.query<{ type: string; count: number }>(
+    `SELECT n.type::text AS type, COUNT(*)::int AS count
+       FROM notification_recipients nr
+       JOIN notifications n ON n.id = nr.notification_id
+      WHERE nr.user_id = $1 AND nr.read_at IS NULL AND nr.archived_at IS NULL
+      GROUP BY n.type`,
     [userId],
   );
 
-  return result.rows[0]?.count ?? 0;
+  const byType: Record<string, number> = {};
+  let total = 0;
+
+  for (const row of result.rows) {
+    byType[row.type] = row.count;
+    total += row.count;
+  }
+
+  return { total, byType };
 };
 
 export const markRead = async (recipientId: number, userId: number): Promise<boolean> => {
@@ -253,4 +272,45 @@ export const archive = async (recipientId: number, userId: number): Promise<bool
   );
 
   return result.rowCount !== null && result.rowCount > 0;
+};
+
+/**
+ * The login behind a teacher, so a notification can reach the person rather
+ * than the staff record.
+ *
+ * Returns nothing when the teacher has no account: not every teacher on the
+ * roll uses the system, and a notification with no recipient is dropped rather
+ * than failing the operation that raised it.
+ */
+export const findTeacherUserId = async (
+  teacherId: number,
+  executor: Queryable = pool,
+): Promise<number[]> => {
+  const result = await executor.query<{ user_id: number }>(
+    `SELECT t.user_id
+       FROM teachers t
+       JOIN users u ON u.id = t.user_id
+      WHERE t.id = $1 AND t.deleted_at IS NULL
+        AND u.deleted_at IS NULL AND u.status = 'ACTIVE'`,
+    [teacherId],
+  );
+
+  return result.rows.map((row) => row.user_id);
+};
+
+/** The login behind a pupil, used when their own work is marked. */
+export const findStudentUserId = async (
+  studentId: number,
+  executor: Queryable = pool,
+): Promise<number[]> => {
+  const result = await executor.query<{ user_id: number }>(
+    `SELECT s.user_id
+       FROM students s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.id = $1 AND s.deleted_at IS NULL
+        AND u.deleted_at IS NULL AND u.status = 'ACTIVE'`,
+    [studentId],
+  );
+
+  return result.rows.map((row) => row.user_id);
 };

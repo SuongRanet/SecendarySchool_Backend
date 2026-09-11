@@ -58,6 +58,7 @@ const loadProfile = async (userId: number): Promise<AuthProfile> => {
     permissions: principal.permissions,
     fullName: withProfile?.full_name ?? null,
     profileType: withProfile?.profile_type ?? null,
+    profileCode: withProfile?.profile_code ?? null,
     teacherId: principal.teacherId,
     studentId: principal.studentId,
     parentId: principal.parentId,

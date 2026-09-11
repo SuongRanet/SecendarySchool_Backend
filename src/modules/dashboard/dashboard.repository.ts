@@ -1,4 +1,5 @@
 import { pool } from '../../database/connection';
+import { ENROLLED_IN_YEAR } from '../../utils/sql';
 
 export interface SchoolCounts {
   totalStudents: number;
@@ -12,14 +13,27 @@ export interface SchoolCounts {
 export const schoolCounts = async (academicYearId: number): Promise<SchoolCounts> => {
   const result = await pool.query<SchoolCounts>(
     `SELECT
-       (SELECT COUNT(*)::int FROM students WHERE deleted_at IS NULL AND status = 'ACTIVE') AS "totalStudents",
+       (SELECT COUNT(DISTINCT e.student_id)::int
+          FROM enrollments e
+          JOIN students s ON s.id = e.student_id
+         WHERE e.academic_year_id = $1
+           AND e.status::text IN ${ENROLLED_IN_YEAR}
+           AND s.deleted_at IS NULL) AS "totalStudents",
        (SELECT COUNT(*)::int FROM teachers WHERE deleted_at IS NULL AND status = 'ACTIVE') AS "totalTeachers",
-       (SELECT COUNT(*)::int FROM parents WHERE deleted_at IS NULL AND is_active) AS "totalParents",
+       (SELECT COUNT(DISTINCT p.id)::int
+          FROM parents p
+          JOIN student_parents sp ON sp.parent_id = p.id
+          JOIN enrollments e ON e.student_id = sp.student_id AND e.academic_year_id = $1
+         WHERE p.deleted_at IS NULL AND p.is_active) AS "totalParents",
        (SELECT COUNT(*)::int FROM classes
          WHERE deleted_at IS NULL AND is_active AND academic_year_id = $1) AS "totalClasses",
-       (SELECT COUNT(*)::int FROM subjects WHERE deleted_at IS NULL AND is_active) AS "totalSubjects",
+       (SELECT COUNT(DISTINCT cs.subject_id)::int
+          FROM class_subjects cs
+          JOIN classes c ON c.id = cs.class_id
+         WHERE c.academic_year_id = $1 AND c.deleted_at IS NULL AND cs.is_active) AS "totalSubjects",
        (SELECT COUNT(*)::int FROM enrollments
-         WHERE academic_year_id = $1 AND status = 'ACTIVE') AS "activeEnrollments"`,
+         WHERE academic_year_id = $1
+           AND status::text IN ${ENROLLED_IN_YEAR}) AS "activeEnrollments"`,
     [academicYearId],
   );
 
@@ -33,7 +47,9 @@ export const genderBreakdown = async (
     `SELECT COALESCE(s.gender::text, 'UNSPECIFIED') AS gender, COUNT(*)::int AS count
        FROM enrollments e
        JOIN students s ON s.id = e.student_id
-      WHERE e.academic_year_id = $1 AND e.status = 'ACTIVE' AND s.deleted_at IS NULL
+      WHERE e.academic_year_id = $1
+        AND e.status::text IN ${ENROLLED_IN_YEAR}
+        AND s.deleted_at IS NULL
       GROUP BY s.gender`,
     [academicYearId],
   );
@@ -52,14 +68,16 @@ export const teacherWorkload = async (
   }>(
     `SELECT t.id AS "teacherId",
             TRIM(CONCAT(t.first_name_en, ' ', t.last_name_en)) AS "teacherName",
-            COUNT(DISTINCT cs.class_id)::int AS "classCount",
+            (SELECT COUNT(DISTINCT cs.class_id)::int
+               FROM class_subjects cs
+               JOIN classes c ON c.id = cs.class_id
+              WHERE cs.teacher_id = t.id AND cs.is_active
+                AND c.deleted_at IS NULL
+                AND c.academic_year_id = $1) AS "classCount",
             (SELECT COUNT(*)::int FROM schedules sc
               WHERE sc.teacher_id = t.id AND sc.academic_year_id = $1 AND sc.is_active) AS "periodCount"
        FROM teachers t
-       LEFT JOIN class_subjects cs ON cs.teacher_id = t.id AND cs.is_active
-       LEFT JOIN classes c ON c.id = cs.class_id AND c.academic_year_id = $1
       WHERE t.deleted_at IS NULL AND t.status = 'ACTIVE'
-      GROUP BY t.id, t.first_name_en, t.last_name_en
       ORDER BY "periodCount" DESC, "teacherName" ASC
       LIMIT 20`,
     [academicYearId],
@@ -191,7 +209,7 @@ export const teacherCounts = async (
        (SELECT COUNT(DISTINCT e.student_id)::int
           FROM enrollments e
           JOIN classes c2 ON c2.id = e.class_id
-         WHERE e.status = 'ACTIVE'
+         WHERE e.status::text IN ${ENROLLED_IN_YEAR}
            AND c2.academic_year_id = $2
            AND (c2.homeroom_teacher_id = $1
                 OR EXISTS (SELECT 1 FROM class_subjects cs2

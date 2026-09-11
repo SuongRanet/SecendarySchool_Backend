@@ -38,7 +38,7 @@ router.get(
   '/today',
   requirePermissions(PERMISSIONS.ATTENDANCE_VIEW),
   validate({ query: summaryQuerySchema }),
-  controller.todayOverview,
+  controller.dayOverview,
 );
 
 router.get(

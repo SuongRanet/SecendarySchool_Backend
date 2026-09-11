@@ -16,13 +16,13 @@ import * as repository from './dashboard.repository';
  * The administrator overview: headline counts, today's attendance, enrollment
  * distribution and the most recent announcements.
  */
-export const adminDashboard = async () => {
+export const adminDashboard = async (attendanceDate?: string) => {
   const year = await academicYearService.requireActiveYear();
 
   const [counts, attendanceToday, enrollmentByGrade, classDistribution, studentStatus, gender, announcements, upcomingExams] =
     await Promise.all([
       repository.schoolCounts(year.id),
-      attendanceService.todayOverview(year.id),
+      attendanceService.dayOverview(year.id, attendanceDate),
       enrollmentService.enrollmentStatsByGrade(year.id),
       enrollmentService.enrollmentStatsByClass(year.id),
       studentService.statusBreakdown(),
@@ -45,13 +45,13 @@ export const adminDashboard = async () => {
 };
 
 /** The principal overview: performance and school-wide indicators. */
-export const principalDashboard = async (termId?: number) => {
+export const principalDashboard = async (termId?: number, attendanceDate?: string) => {
   const year = await academicYearService.requireActiveYear();
 
   const [counts, attendanceToday, performance, classAverages, teacherWorkload, enrollmentByGrade, trend] =
     await Promise.all([
       repository.schoolCounts(year.id),
-      attendanceService.todayOverview(year.id),
+      attendanceService.dayOverview(year.id, attendanceDate),
       repository.overallAcademicPerformance(year.id, termId ?? null),
       gradeService.classAverages(year.id, termId ?? null),
       repository.teacherWorkload(year.id),

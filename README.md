@@ -1,10 +1,10 @@
-# Hun Sen Turi Secondary School — Management System (Backend)
+# Hun Sen Turey Secondary School — Management System (Backend)
 
-The REST API for the Hun Sen Turi Secondary School Management System, a lower secondary school
+The REST API for the Hun Sen Turey Secondary School Management System, a lower secondary school
 (junior high) in Cambodia serving **Grade 7, Grade 8 and Grade 9**.
 
 ```text
-School      Hun Sen Turi Secondary School
+School      Hun Sen Turey Secondary School
 Type        Lower secondary school (junior high), Cambodia
 Grades      Grade 7 · Grade 8 · Grade 9
 Curriculum  Cambodian lower secondary (MoEYS)
@@ -27,7 +27,7 @@ Exit exam   Grade 9 National Examination (Diplôme)
 ## Getting started
 
 ```bash
-createdb hun_sen_turi
+createdb hun_sen_turey
 cp .env.example .env       # then set DATABASE_URL, JWT_SECRET and JWT_REFRESH_SECRET
 npm install
 npm run migrate

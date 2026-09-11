@@ -55,9 +55,15 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
 
 export const unreadCount = asyncHandler(async (req: Request, res: Response) => {
   const user = requireUser(req);
-  const count = await service.unreadCount(user.id);
+  const unread = await service.unreadCount(user.id);
 
-  return sendSuccess(res, { count }, 'Unread count loaded successfully');
+  return sendSuccess(
+    res,
+    // `count` is the whole-bell figure; `byType` lets a single request feed the
+    // per-section badges as well.
+    { count: unread.total, byType: unread.byType },
+    'Unread count loaded successfully',
+  );
 });
 
 export const markRead = asyncHandler(async (req: Request, res: Response) => {

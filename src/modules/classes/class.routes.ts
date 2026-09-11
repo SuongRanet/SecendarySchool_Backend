@@ -11,6 +11,7 @@ import {
   listClassesQuerySchema,
   replaceClassSubjectsSchema,
   updateClassSchema,
+  classSubjectsQuerySchema,
 } from './class.schema';
 
 const router = Router();
@@ -62,7 +63,7 @@ router.delete(
 router.get(
   '/:id/subjects',
   requirePermissions(PERMISSIONS.CLASSES_VIEW),
-  validate({ params: idParamSchema }),
+  validate({ params: idParamSchema, query: classSubjectsQuerySchema }),
   controller.listSubjects,
 );
 

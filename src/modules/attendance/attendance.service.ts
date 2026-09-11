@@ -386,16 +386,25 @@ export const dailyTrend = async (filters: {
   dateTo: string;
 }): Promise<DailyAttendancePoint[]> => repository.dailyTrend(filters);
 
-export const todayOverview = async (
+/**
+ * The register for one day, defaulting to today.
+ *
+ * `date` is echoed back so a caller showing the figures can label them with the
+ * day they belong to. Without that the dashboard would show yesterday's numbers
+ * under the word "today" whenever a date was passed.
+ */
+export const dayOverview = async (
   academicYearId: number,
-): Promise<AttendanceSummary & { expected: number; notRecorded: number }> => {
-  const totals = await repository.todayOverview(academicYearId);
+  date?: string,
+): Promise<AttendanceSummary & { expected: number; notRecorded: number; date: string }> => {
+  const totals = await repository.dayOverview(academicYearId, date ?? null);
   const totalRecords = totals.present + totals.absent + totals.late + totals.excused + totals.leave;
 
   return {
     ...withRate({ ...totals, totalRecords }),
     expected: totals.expected,
     notRecorded: Math.max(totals.expected - totalRecords, 0),
+    date: totals.date,
   };
 };
 

@@ -63,3 +63,13 @@ export type ListClassesQuery = z.infer<typeof listClassesQuerySchema>;
 export type AssignClassSubjectBody = z.infer<typeof assignClassSubjectSchema>;
 export type ReplaceClassSubjectsBody = z.infer<typeof replaceClassSubjectsSchema>;
 export type ClassStudentsQuery = z.infer<typeof classStudentsQuerySchema>;
+
+/**
+ * `mine=true` narrows a class's subject list to the ones the caller teaches.
+ *
+ * Used by the screens where a teacher writes marks, so the picker cannot offer
+ * a subject the save would then refuse.
+ */
+export const classSubjectsQuerySchema = z.object({
+  mine: booleanQuerySchema,
+});

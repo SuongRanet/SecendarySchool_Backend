@@ -2,7 +2,7 @@ import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams, SortParams } from '../../types';
 import { buildSearchPattern } from '../../utils/pagination';
-import { buildUpdateSet, ParamBuilder } from '../../utils/sql';
+import { ACTIVE_YEAR, buildUpdateSet, ParamBuilder } from '../../utils/sql';
 import type { CreateRoomInput, RoomFilters, RoomRow, UpdateRoomInput } from './room.types';
 
 export const ROOM_SORT_COLUMNS = ['code', 'name', 'building', 'capacity'] as const;
@@ -15,8 +15,16 @@ const SORT_COLUMN_SQL: Record<RoomSortColumn, string> = {
   capacity: 'r.capacity',
 };
 
+/*
+ * How many periods the room is booked for this year.
+ *
+ * Schedules are rebuilt every year and the old ones are kept, so an unscoped
+ * count grew with the school's age rather than describing its week.
+ */
 const SCHEDULE_COUNT = `
-  (SELECT COUNT(*)::int FROM schedules s WHERE s.room_id = r.id AND s.is_active) AS schedule_count
+  (SELECT COUNT(*)::int FROM schedules s
+    WHERE s.room_id = r.id AND s.is_active
+      AND s.academic_year_id = ${ACTIVE_YEAR}) AS schedule_count
 `;
 
 const buildConditions = (filters: RoomFilters, builder: ParamBuilder): string[] => {

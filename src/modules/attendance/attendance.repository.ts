@@ -409,10 +409,22 @@ export const dailyTrend = async (filters: {
   return result.rows;
 };
 
-/** Today's school-wide totals, used by the administrator dashboard. */
-export const todayOverview = async (
+/**
+ * One day's school-wide totals, used by the administrator dashboard.
+ *
+ * The day is a parameter rather than `CURRENT_DATE` because a register is taken
+ * during the morning: before it is, "today" is legitimately empty, and a
+ * dashboard that can only ever show today then reads as though the school had
+ * vanished. Being able to step back a day distinguishes "not taken yet" from
+ * "nobody came".
+ */
+export const dayOverview = async (
   academicYearId: number,
-): Promise<{ present: number; absent: number; late: number; excused: number; leave: number; expected: number }> => {
+  attendanceDate: string | null,
+): Promise<{
+  present: number; absent: number; late: number; excused: number; leave: number;
+  expected: number; date: string;
+}> => {
   const result = await pool.query<{
     present: number;
     absent: number;
@@ -420,6 +432,7 @@ export const todayOverview = async (
     excused: number;
     leave: number;
     expected: number;
+    date: string;
   }>(
     `SELECT
        COUNT(*) FILTER (WHERE a.status = 'PRESENT')::int AS present,
@@ -428,14 +441,27 @@ export const todayOverview = async (
        COUNT(*) FILTER (WHERE a.status = 'EXCUSED')::int AS excused,
        COUNT(*) FILTER (WHERE a.status = 'LEAVE')::int AS leave,
        (SELECT COUNT(*)::int FROM enrollments e
-         WHERE e.academic_year_id = $1 AND e.status = 'ACTIVE') AS expected
+         WHERE e.academic_year_id = $1 AND e.status = 'ACTIVE') AS expected,
+       /*
+        * The day resolved by the database, not by Node.
+        *
+        * Defaulting in JavaScript used toISOString, which is UTC: from five in
+        * the evening Cambodian time onwards that is yesterday, so a register
+        * taken in the evening was reported against the wrong day. CURRENT_DATE
+        * is the school's own day, and it is echoed back so the caller can label
+        * the figures with the day they actually describe.
+        */
+       COALESCE($2::date, CURRENT_DATE)::text AS date
      FROM attendance a
-     WHERE a.academic_year_id = $1 AND a.attendance_date = CURRENT_DATE`,
-    [academicYearId],
+     WHERE a.academic_year_id = $1
+       AND a.attendance_date = COALESCE($2::date, CURRENT_DATE)`,
+    [academicYearId, attendanceDate],
   );
 
   return (
-    result.rows[0] ?? { present: 0, absent: 0, late: 0, excused: 0, leave: 0, expected: 0 }
+    result.rows[0] ?? {
+      present: 0, absent: 0, late: 0, excused: 0, leave: 0, expected: 0, date: '',
+    }
   );
 };
 

@@ -14,12 +14,19 @@ const COMPONENTS = [
   { type: 'FINAL', weight: 40 },
 ];
 
+/**
+ * The school's own bands, taken from the Student Achievement sheets.
+ *
+ * Those sheets mark out of 50 and label a pupil Very Good at 40, Good at 32.5
+ * and Average at 25 — exactly 80%, 65% and 50%. Expressed as percentages the
+ * scale below reproduces the printed grade for every one of the 225 pupils on
+ * the sheets, so a grade calculated here matches the paper the school issues.
+ */
 const SCALES = [
-  { letter: 'A', min: 85, max: 100, gpa: 4, performance: 'EXCELLENT', remark: 'Excellent' },
-  { letter: 'B', min: 70, max: 84.99, gpa: 3, performance: 'GOOD', remark: 'Good' },
-  { letter: 'C', min: 55, max: 69.99, gpa: 2, performance: 'FAIR', remark: 'Fair' },
-  { letter: 'D', min: 40, max: 54.99, gpa: 1, performance: 'NEEDS_IMPROVEMENT', remark: 'Needs improvement' },
-  { letter: 'F', min: 0, max: 39.99, gpa: 0, performance: 'NEEDS_IMPROVEMENT', remark: 'Fail' },
+  { letter: 'A', min: 80, max: 100, gpa: 4, performance: 'EXCELLENT', remark: 'Very Good' },
+  { letter: 'B', min: 65, max: 79.99, gpa: 3, performance: 'GOOD', remark: 'Good' },
+  { letter: 'C', min: 50, max: 64.99, gpa: 2, performance: 'FAIR', remark: 'Average' },
+  { letter: 'F', min: 0, max: 49.99, gpa: 0, performance: 'NEEDS_IMPROVEMENT', remark: 'Poor' },
 ];
 
 /** Seeds the default grading scheme, its weightings and its letter grade scale. */
@@ -57,6 +64,27 @@ export const seedGradingSchemes = async (client: PoolClient): Promise<void> => {
              performance = EXCLUDED.performance,
              remark_en = EXCLUDED.remark_en`,
       [schemeId, scale.letter, scale.min, scale.max, scale.gpa, scale.performance, scale.remark],
+    );
+  }
+
+  /**
+   * Drop bands the school no longer uses.
+   *
+   * The upsert above only ever adds or updates a letter, so a band retired from
+   * SCALES stayed behind and overlapped its neighbours — a mark of 52 matched
+   * both the new C (50-64.99) and the old D (40-54.99), and `applyScale` takes
+   * whichever it finds first. Two bands covering one mark is not a scale.
+   */
+  const retired = await client.query<{ letter_grade: string }>(
+    `DELETE FROM grade_scales
+      WHERE grading_scheme_id = $1 AND letter_grade <> ALL($2::text[])
+      RETURNING letter_grade`,
+    [schemeId, SCALES.map((scale) => scale.letter)],
+  );
+
+  if (retired.rowCount) {
+    logger.info(
+      `Removed ${retired.rowCount} retired grade band(s): ${retired.rows.map((r) => r.letter_grade).join(', ')}`,
     );
   }
 

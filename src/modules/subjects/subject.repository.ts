@@ -2,7 +2,7 @@ import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams, SortParams } from '../../types';
 import { buildSearchPattern } from '../../utils/pagination';
-import { buildUpdateSet, ParamBuilder } from '../../utils/sql';
+import { ACTIVE_YEAR, buildUpdateSet, ParamBuilder } from '../../utils/sql';
 import type {
   CreateSubjectInput,
   SubjectFilters,
@@ -25,10 +25,25 @@ const EXTRA_SELECT = `
        FROM grade_subjects gs WHERE gs.subject_id = s.id),
     ARRAY[]::bigint[]
   ) AS grade_level_ids,
-  (SELECT COUNT(*)::int FROM class_subjects cs WHERE cs.subject_id = s.id AND cs.is_active) AS class_count,
+  /*
+   * Both counts describe the year the school is in. A class_subjects row carries
+   * no year of its own -- it hangs off a class, and a class belongs to a year --
+   * so counting it directly summed every year the subject has ever been taught.
+   * Every subject on the list showed seventeen classes once a second year
+   * existed: nine this year plus eight last.
+   */
+  (SELECT COUNT(*)::int
+     FROM class_subjects cs
+     JOIN classes c ON c.id = cs.class_id
+    WHERE cs.subject_id = s.id AND cs.is_active
+      AND c.deleted_at IS NULL
+      AND c.academic_year_id = ${ACTIVE_YEAR}) AS class_count,
   (SELECT COUNT(DISTINCT cs2.teacher_id)::int
      FROM class_subjects cs2
-    WHERE cs2.subject_id = s.id AND cs2.teacher_id IS NOT NULL) AS teacher_count
+     JOIN classes c2 ON c2.id = cs2.class_id
+    WHERE cs2.subject_id = s.id AND cs2.teacher_id IS NOT NULL
+      AND c2.deleted_at IS NULL
+      AND c2.academic_year_id = ${ACTIVE_YEAR}) AS teacher_count
 `;
 
 const buildConditions = (filters: SubjectFilters, builder: ParamBuilder): string[] => {

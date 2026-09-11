@@ -94,7 +94,9 @@ export const list = async (
   return { rows: result.rows.map(toDto), total: result.total };
 };
 
-export const unreadCount = async (userId: number): Promise<number> =>
+export const unreadCount = async (
+  userId: number,
+): Promise<{ total: number; byType: Record<string, number> }> =>
   repository.countUnread(userId);
 
 export const markRead = async (recipientId: number, userId: number): Promise<void> => {
@@ -114,4 +116,37 @@ export const archive = async (recipientId: number, userId: number): Promise<void
   if (!updated) {
     throw AppError.notFound('Notification not found', 'NOTIFICATION_NOT_FOUND');
   }
+};
+
+/**
+ * Tells the teacher who set a piece of work that a pupil has handed it in.
+ *
+ * Homework only works as a conversation if it travels both ways. Publishing an
+ * assignment already reached the class, but a submission reached nobody: the
+ * teacher had to open each assignment and count what had arrived, which is how
+ * marking gets forgotten.
+ */
+export const notifyTeacher = async (
+  teacherId: number | null,
+  input: Omit<CreateNotificationInput, 'userIds' | 'audience'>,
+  executor?: Queryable,
+): Promise<number> => {
+  if (!teacherId) {
+    return 0;
+  }
+
+  const userIds = await repository.findTeacherUserId(teacherId, executor);
+
+  return userIds.length === 0 ? 0 : dispatch({ ...input, userIds }, executor);
+};
+
+/** Tells one pupil about their own work — a mark, or feedback on a submission. */
+export const notifyStudent = async (
+  studentId: number,
+  input: Omit<CreateNotificationInput, 'userIds' | 'audience'>,
+  executor?: Queryable,
+): Promise<number> => {
+  const userIds = await repository.findStudentUserId(studentId, executor);
+
+  return userIds.length === 0 ? 0 : dispatch({ ...input, userIds }, executor);
 };

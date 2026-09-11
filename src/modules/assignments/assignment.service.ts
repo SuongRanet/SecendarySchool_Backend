@@ -9,7 +9,9 @@ import { AppError } from '../../utils/app-error';
 import * as auditService from '../audit/audit.service';
 import * as assessmentService from '../assessments/assessment.service';
 import * as classRepository from '../classes/class.repository';
+import * as fileService from '../files/file.service';
 import * as notificationService from '../notifications/notification.service';
+import * as studentRepository from '../students/student.repository';
 import * as repository from './assignment.repository';
 import type {
   AssignmentDto,
@@ -94,6 +96,7 @@ export const create = async (
   context: AuditContext,
 ): Promise<AssignmentDto> => {
   await assessmentService.assertCanManage(user, input.classId, input.subjectId);
+  assertStoredAttachment(input.attachmentUrl);
 
   const classRow = await classRepository.findClassById(input.classId);
 
@@ -110,7 +113,17 @@ export const create = async (
       {
         ...input,
         academicYearId: classRow.academic_year_id,
-        teacherId: user.teacherId ?? null,
+        /*
+         * The teacher named on the request, falling back to whoever is setting
+         * it.
+         *
+         * The body already accepted `teacherId` and this ignored it, so homework
+         * created by anyone without a teacher record of their own — an
+         * administrator covering for absence, the seed — was stored with no
+         * teacher at all. Nothing showed the gap until submissions had to be
+         * announced to someone and there was nobody to announce them to.
+         */
+        teacherId: input.teacherId ?? user.teacherId ?? null,
         createdBy: context.userId,
       },
       client,
@@ -166,6 +179,7 @@ export const update = async (
   }
 
   await assessmentService.assertCanManage(user, existing.class_id, existing.subject_id);
+  assertStoredAttachment(input.attachmentUrl);
 
   const { oldValue, newValue } = auditService.diff(
     {
@@ -398,7 +412,47 @@ export const gradeSubmissions = async (
     );
   });
 
+  /**
+   * One notification per pupil, carrying their own mark and nobody else's.
+   *
+   * A class-wide notification would be simpler and quite wrong: a mark is the
+   * pupil's own business, and the whole point of `notifyStudent` is that it
+   * cannot reach the rest of the class.
+   */
+  for (const entry of entries) {
+    await notificationService.notifyStudent(entry.studentId, {
+      type: 'HOMEWORK_GRADED',
+      title: `${assignment.title} has been marked`,
+      body:
+        entry.score === null || entry.score === undefined
+          ? (assignment.subject_name ?? 'Homework')
+          : `${assignment.subject_name ?? 'Homework'} — ${entry.score}/${assignment.max_score ?? 0}`,
+      entityType: 'assignment',
+      entityId: assignmentId,
+      actionUrl: `/student/homework/${assignmentId}`,
+      createdBy: context.userId,
+    });
+  }
+
   return listSubmissions(assignmentId);
+};
+
+/**
+ * An attachment must name a file this server actually stored. The column is a
+ * plain string, so without this a client could hand in any text and have it read
+ * back as a link.
+ */
+const assertStoredAttachment = (attachmentUrl: string | null | undefined): void => {
+  if (!attachmentUrl) {
+    return;
+  }
+
+  if (!fileService.parseFileUrl(attachmentUrl)) {
+    throw AppError.badRequest(
+      'That attachment does not refer to an uploaded file',
+      'INVALID_ATTACHMENT',
+    );
+  }
 };
 
 /** A student submitting their own homework. */
@@ -416,6 +470,18 @@ export const submit = async (
 
   if (assignment.status !== 'PUBLISHED') {
     throw AppError.conflict('This assignment is not open for submission', 'ASSIGNMENT_NOT_OPEN');
+  }
+
+  assertStoredAttachment(input.attachmentUrl);
+
+  // Handing work in means handing something in: an empty note with no file
+  // would otherwise be recorded as a submission and hide the fact that nothing
+  // was done.
+  if (!input.content?.trim() && !input.attachmentUrl) {
+    throw AppError.badRequest(
+      'Write an answer or attach a file before handing in',
+      'SUBMISSION_EMPTY',
+    );
   }
 
   await withTransaction(async (client) => {
@@ -442,6 +508,28 @@ export const submit = async (
       },
       client,
     );
+  });
+
+  /**
+   * Sent after the transaction, not inside it.
+   *
+   * A notification is a courtesy; the submission is the record. Dispatching
+   * inside the transaction would let a failure to notify roll back a pupil's
+   * handed-in work, which is the wrong way round.
+   */
+  const pupil = await studentRepository.findStudentById(studentId);
+  const who = pupil
+    ? `${pupil.first_name_en} ${pupil.last_name_en}`.trim()
+    : 'A student';
+
+  await notificationService.notifyTeacher(assignment.teacher_id, {
+    type: 'HOMEWORK_SUBMITTED',
+    title: `${who} handed in ${assignment.title}`,
+    body: `${assignment.subject_name ?? 'Homework'} — ${assignment.class_name ?? ''}`.trim(),
+    entityType: 'assignment',
+    entityId: assignmentId,
+    actionUrl: `/assignments/${assignmentId}`,
+    createdBy: context.userId,
   });
 
   return listSubmissions(assignmentId);

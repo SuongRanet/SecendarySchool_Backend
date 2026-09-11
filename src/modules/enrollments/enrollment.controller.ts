@@ -13,6 +13,7 @@ import type {
   CreateEnrollmentBody,
   EnrollmentStatsQuery,
   ListEnrollmentsQuery,
+  GraduateCohortBody,
   PromoteCohortBody,
   TransferEnrollmentBody,
   UpdateEnrollmentBody,
@@ -78,6 +79,13 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
   const enrollment = await service.updateDetails(Number(req.params.id), body, getAuditContext(req));
 
   return sendSuccess(res, enrollment, 'Enrollment updated successfully');
+});
+
+export const graduateCohort = asyncHandler(async (req: Request, res: Response) => {
+  const body = req.body as GraduateCohortBody;
+  const result = await service.graduateExitGrade(body, getAuditContext(req));
+
+  return sendSuccess(res, result, `Graduated ${result.graduated} pupil(s)`);
 });
 
 export const promoteCohort = asyncHandler(async (req: Request, res: Response) => {

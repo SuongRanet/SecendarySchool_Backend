@@ -37,6 +37,7 @@ export interface ReportCardRow {
   date_of_birth?: string | null;
   class_name?: string;
   grade_level_name?: string;
+  homeroom_teacher_id?: number | null;
   homeroom_teacher_name?: string | null;
   academic_year_name?: string;
   term_name?: string | null;
@@ -89,6 +90,7 @@ export interface ReportCardDto {
   classId: number;
   className: string;
   gradeLevelName: string;
+  homeroomTeacherId: number | null;
   homeroomTeacherName: string | null;
   totalScore: number | null;
   averageScore: number | null;
@@ -129,6 +131,11 @@ export interface UpdateReportCardInput {
 }
 
 export interface ReportCardFilters {
+  /**
+   * Restricts the list to the children of one guardian. Set from the token for
+   * a parent, never from the query string.
+   */
+  parentId?: number;
   academicYearId?: number;
   termId?: number;
   classId?: number;

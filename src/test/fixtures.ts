@@ -51,9 +51,20 @@ const expectCreated = (response: { status: number; body: unknown }, what: string
 const claimYear = (attempt: number): number =>
   2100 + Math.floor(Math.random() * 300) + attempt * 7;
 
-/** Grade level order is capped at 20 by the API, and 7-9 belong to the school. */
-const claimLevelOrder = (attempt: number): number =>
-  10 + ((Math.floor(Math.random() * 11) + attempt) % 11);
+/**
+ * Grade level order is capped at 20 by the API and 7-9 belong to the school, so
+ * a fixture has eleven slots to choose from.
+ *
+ * The starting point is random — several suites run in parallel and must not all
+ * try 10 first — but the retries then sweep the range in order. Re-rolling the
+ * random on every attempt let a fixture try the same taken slot twice and give
+ * up while a free one was still going spare.
+ */
+const LEVEL_ORDER_SLOTS = 11;
+const LEVEL_ORDER_BASE = 10;
+
+const claimLevelOrder = (start: number, attempt: number): number =>
+  LEVEL_ORDER_BASE + ((start + attempt) % LEVEL_ORDER_SLOTS);
 
 const iso = (date: Date): string => date.toISOString().slice(0, 10);
 
@@ -93,13 +104,43 @@ export const createFixtures = async (
         AND NOT EXISTS (SELECT 1 FROM classes c WHERE c.academic_year_id = academic_years.id)`,
   );
 
-  // Grade level order is unique and capped at 20, so a handful of abandoned
-  // fixture grades is enough to exhaust every slot a new fixture can try.
-  await query(
-    `DELETE FROM grade_levels
-      WHERE name_en LIKE 'Test Grade %'
-        AND NOT EXISTS (SELECT 1 FROM classes c WHERE c.grade_level_id = grade_levels.id)`,
-  );
+  /**
+   * Reclaim every abandoned fixture grade level, not only the childless ones.
+   *
+   * Order is unique and capped at 20, so eleven slots exist in total. A teardown
+   * that fails part way — or a suite killed mid-run — leaves a grade level with
+   * a class still attached, and the old sweep skipped exactly those. Each one
+   * permanently burned a slot, and once all eleven were gone every later fixture
+   * failed with GRADE_LEVEL_ORDER_TAKEN.
+   *
+   * Only fixtures ever create rows named "Test ...", so clearing them and the
+   * classes hanging off them is safe. The order below walks child to parent.
+   */
+  const staleGrades = `SELECT id FROM grade_levels WHERE name_en LIKE 'Test Grade %'`;
+  const staleClasses = `SELECT id FROM classes WHERE grade_level_id IN (${staleGrades})`;
+
+  for (const sql of [
+    `DELETE FROM attendance WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM grades WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM report_cards WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM assessment_results WHERE assessment_id IN (
+       SELECT id FROM assessments WHERE class_id IN (${staleClasses}))`,
+    `DELETE FROM assessments WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM enrollments WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM schedules WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM class_subjects WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM teacher_classes WHERE class_id IN (${staleClasses})`,
+    `DELETE FROM classes WHERE grade_level_id IN (${staleGrades})`,
+    `DELETE FROM grade_subjects WHERE grade_level_id IN (${staleGrades})`,
+    `DELETE FROM grade_levels WHERE name_en LIKE 'Test Grade %'`,
+  ]) {
+    try {
+      await query(sql);
+    } catch {
+      // A row held by something outside the fixtures is left alone; the next
+      // statement still runs, so one stubborn leftover cannot block the rest.
+    }
+  }
 
   if (options.spanToday) {
     const startDate = shiftDays(-180);
@@ -140,12 +181,13 @@ export const createFixtures = async (
   const termId: number = termResponse.body.data.id;
 
   let gradeLevelResponse;
+  const levelOrderStart = Math.floor(Math.random() * LEVEL_ORDER_SLOTS);
 
-  for (let attempt = 0; attempt < 11; attempt += 1) {
+  for (let attempt = 0; attempt < LEVEL_ORDER_SLOTS; attempt += 1) {
     gradeLevelResponse = await api.post('/api/v1/grade-levels').send({
       code: `TG${suffix}`,
       nameEn: `Test Grade ${suffix}`,
-      levelOrder: claimLevelOrder(attempt),
+      levelOrder: claimLevelOrder(levelOrderStart, attempt),
     });
 
     if (gradeLevelResponse.status === 201 || gradeLevelResponse.status === 200) {

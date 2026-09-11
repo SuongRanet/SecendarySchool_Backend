@@ -2,7 +2,7 @@ import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams, SortParams } from '../../types';
 import { buildSearchPattern } from '../../utils/pagination';
-import { ParamBuilder, buildUpdateSet, buildWhere } from '../../utils/sql';
+import { ACTIVE_YEAR, ParamBuilder, buildUpdateSet, buildWhere } from '../../utils/sql';
 import type {
   CreateTeacherInput,
   TeacherAssignmentRow,
@@ -39,18 +39,30 @@ const EXTRA_SELECT = `
   ) AS subject_ids,
   COALESCE(
     (SELECT ARRAY_AGG(c.id) FROM classes c
-      WHERE c.homeroom_teacher_id = t.id AND c.deleted_at IS NULL),
+      WHERE c.homeroom_teacher_id = t.id AND c.deleted_at IS NULL
+        AND c.academic_year_id = ${ACTIVE_YEAR}),
     ARRAY[]::bigint[]
   ) AS homeroom_class_ids,
   (SELECT COUNT(DISTINCT cs.class_id)::int
-     FROM class_subjects cs WHERE cs.teacher_id = t.id AND cs.is_active) AS class_count,
+     FROM class_subjects cs
+     JOIN classes c ON c.id = cs.class_id
+    WHERE cs.teacher_id = t.id AND cs.is_active
+      AND c.deleted_at IS NULL
+      AND c.academic_year_id = ${ACTIVE_YEAR}) AS class_count,
   (SELECT COUNT(DISTINCT e.student_id)::int
      FROM enrollments e
     WHERE e.status = 'ACTIVE'
+      AND e.academic_year_id = ${ACTIVE_YEAR}
       AND e.class_id IN (
-        SELECT cs2.class_id FROM class_subjects cs2 WHERE cs2.teacher_id = t.id AND cs2.is_active
+        SELECT cs2.class_id FROM class_subjects cs2
+          JOIN classes c2 ON c2.id = cs2.class_id
+         WHERE cs2.teacher_id = t.id AND cs2.is_active
+           AND c2.deleted_at IS NULL
+           AND c2.academic_year_id = ${ACTIVE_YEAR}
         UNION
-        SELECT c2.id FROM classes c2 WHERE c2.homeroom_teacher_id = t.id AND c2.deleted_at IS NULL
+        SELECT c3.id FROM classes c3
+         WHERE c3.homeroom_teacher_id = t.id AND c3.deleted_at IS NULL
+           AND c3.academic_year_id = ${ACTIVE_YEAR}
       )) AS student_count
 `;
 
@@ -314,21 +326,37 @@ export const replaceTeacherSubjects = async (
   );
 };
 
-/** Every class subject a teacher is responsible for, plus their homerooms. */
+/**
+ * Every class a teacher is responsible for: one row per subject they teach, plus
+ * a row for a homeroom class where they teach nothing at all.
+ *
+ * That second case is easy to miss and was missing here. A homeroom teacher who
+ * happens not to teach their own class — two of the school's eight — got no row
+ * back, so their own class never appeared in "My Classes" and they could not
+ * open it to take the register. Their dashboard counted the class, because that
+ * query already allowed for homerooms, so the two numbers disagreed.
+ *
+ * The homeroom-only row carries no subject, so `class_subject_id`, `subject_id`
+ * and `subject_name` are null there. Callers must expect that.
+ */
 export const findTeacherAssignments = async (
   teacherId: number,
   academicYearId?: number,
 ): Promise<TeacherAssignmentRow[]> => {
   const builder = new ParamBuilder();
-  const teacherPlaceholder = builder.add(teacherId);
-  const conditions = [`cs.teacher_id = ${teacherPlaceholder}`, 'c.deleted_at IS NULL'];
+  const teacher = builder.add(teacherId);
+  /**
+   * Deliberately unscoped when no year is named: this endpoint is a teacher's
+   * record across years, and the admin detail page prints an academic-year
+   * column beside every row.
+   *
+   * Screens that show a single year's load — "My Classes", the workspace — must
+   * pass the year, or they will stack this year's classes on last year's.
+   */
+  const year = academicYearId !== undefined ? builder.add(academicYearId) : null;
+  const yearFilter = year ? `AND c.academic_year_id = ${year}` : '';
 
-  if (academicYearId !== undefined) {
-    conditions.push(`c.academic_year_id = ${builder.add(academicYearId)}`);
-  }
-
-  const result = await pool.query<TeacherAssignmentRow>(
-    `SELECT cs.id AS class_subject_id,
+  const columns = `
             c.id AS class_id,
             c.name AS class_name,
             c.code AS class_code,
@@ -336,18 +364,40 @@ export const findTeacherAssignments = async (
             y.name AS academic_year_name,
             c.grade_level_id,
             g.name_en AS grade_level_name,
+            (c.homeroom_teacher_id = ${teacher}) AS is_homeroom,
+            (SELECT COUNT(*)::int FROM enrollments e
+              WHERE e.class_id = c.id AND e.status = 'ACTIVE') AS student_count`;
+
+  const result = await pool.query<TeacherAssignmentRow>(
+    `SELECT cs.id AS class_subject_id,
             s.id AS subject_id,
             s.name_en AS subject_name,
-            (c.homeroom_teacher_id = cs.teacher_id) AS is_homeroom,
-            (SELECT COUNT(*)::int FROM enrollments e
-              WHERE e.class_id = c.id AND e.status = 'ACTIVE') AS student_count
+            ${columns}
        FROM class_subjects cs
        JOIN classes c ON c.id = cs.class_id
        JOIN academic_years y ON y.id = c.academic_year_id
        JOIN grade_levels g ON g.id = c.grade_level_id
        JOIN subjects s ON s.id = cs.subject_id
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY y.start_date DESC, g.level_order ASC, c.name ASC, s.name_en ASC`,
+      WHERE cs.teacher_id = ${teacher}
+        AND c.deleted_at IS NULL
+        ${yearFilter}
+
+      UNION ALL
+
+     SELECT NULL AS class_subject_id,
+            NULL AS subject_id,
+            NULL AS subject_name,
+            ${columns}
+       FROM classes c
+       JOIN academic_years y ON y.id = c.academic_year_id
+       JOIN grade_levels g ON g.id = c.grade_level_id
+      WHERE c.homeroom_teacher_id = ${teacher}
+        AND c.deleted_at IS NULL
+        ${yearFilter}
+        AND NOT EXISTS (SELECT 1 FROM class_subjects cs2
+                         WHERE cs2.class_id = c.id AND cs2.teacher_id = ${teacher})
+
+      ORDER BY academic_year_name DESC, grade_level_name ASC, class_name ASC, subject_name ASC`,
     builder.params,
   );
 
@@ -361,9 +411,16 @@ export const findTeacherSchedule = async (
   const builder = new ParamBuilder();
   const conditions = [`s.teacher_id = ${builder.add(teacherId)}`, 's.is_active'];
 
-  if (academicYearId !== undefined) {
-    conditions.push(`s.academic_year_id = ${builder.add(academicYearId)}`);
-  }
+  /**
+   * A timetable with no year named is this year's timetable. Without the
+   * fallback both years' periods came back together and every slot on the
+   * week appeared to hold two lessons at once.
+   */
+  conditions.push(
+    academicYearId !== undefined
+      ? `s.academic_year_id = ${builder.add(academicYearId)}`
+      : `s.academic_year_id = ${ACTIVE_YEAR}`,
+  );
 
   const result = await pool.query<TeacherScheduleRow>(
     `SELECT s.id, s.day_of_week, s.period_number, s.start_time, s.end_time,
@@ -451,4 +508,21 @@ export const restoreTeacher = async (
   );
 
   return result.rowCount !== null && result.rowCount > 0;
+};
+
+/** True when this teacher is the homeroom teacher of the class. */
+export const isHomeroomTeacherOf = async (
+  teacherId: number,
+  classId: number,
+  executor: Queryable = pool,
+): Promise<boolean> => {
+  const result = await executor.query<{ is_homeroom: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM classes c
+        WHERE c.id = $2 AND c.homeroom_teacher_id = $1 AND c.deleted_at IS NULL
+     ) AS is_homeroom`,
+    [teacherId, classId],
+  );
+
+  return result.rows[0]?.is_homeroom ?? false;
 };

@@ -35,3 +35,6 @@ coverage/
 .DS_Store
 Thumbs.db
 *.sw?
+
+# Homework attachments live on disk, not in the repository
+uploads/

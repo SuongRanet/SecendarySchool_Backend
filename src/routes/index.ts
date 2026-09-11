@@ -11,9 +11,9 @@ import classRoutes from '../modules/classes/class.routes';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes';
 import enrollmentRoutes from '../modules/enrollments/enrollment.routes';
 import examRoutes from '../modules/exams/exam.routes';
+import fileRoutes from '../modules/files/file.routes';
 import gradeLevelRoutes from '../modules/grade-levels/grade-level.routes';
 import gradeRoutes from '../modules/grades/grade.routes';
-import nationalExamRoutes from '../modules/national-exams/national-exam.routes';
 import notificationRoutes from '../modules/notifications/notification.routes';
 import parentRoutes from '../modules/parents/parent.routes';
 import reportCardRoutes from '../modules/report-cards/report-card.routes';
@@ -54,11 +54,13 @@ router.use('/attendance', attendanceRoutes);
 // Academic performance
 router.use('/assessments', assessmentRoutes);
 router.use('/exams', examRoutes);
-router.use('/national-exams', nationalExamRoutes);
 router.use('/grades', gradeRoutes);
 router.use('/report-cards', reportCardRoutes);
 router.use('/assignments', assignmentRoutes);
 router.use('/behaviors', behaviorRoutes);
+
+// Homework attachments
+router.use('/files', fileRoutes);
 
 // Communication
 router.use('/announcements', announcementRoutes);

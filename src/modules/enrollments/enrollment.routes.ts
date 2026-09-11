@@ -7,6 +7,7 @@ import {
   createEnrollmentSchema,
   enrollmentStatsQuerySchema,
   listEnrollmentsQuerySchema,
+  graduateCohortSchema,
   promoteCohortSchema,
   transferEnrollmentSchema,
   updateEnrollmentSchema,
@@ -43,6 +44,13 @@ router.post(
   requirePermissions(PERMISSIONS.ENROLLMENTS_MANAGE),
   validate({ body: createEnrollmentSchema }),
   controller.create,
+);
+
+router.post(
+  '/graduate',
+  requirePermissions(PERMISSIONS.ENROLLMENTS_MANAGE),
+  validate({ body: graduateCohortSchema }),
+  controller.graduateCohort,
 );
 
 router.post(

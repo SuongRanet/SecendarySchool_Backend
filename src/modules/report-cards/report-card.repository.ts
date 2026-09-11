@@ -19,6 +19,7 @@ const BASE_SELECT = `
          s.date_of_birth,
          c.name AS class_name,
          g.name_en AS grade_level_name,
+         c.homeroom_teacher_id,
          NULLIF(TRIM(CONCAT(t.first_name_en, ' ', t.last_name_en)), '') AS homeroom_teacher_name,
          y.name AS academic_year_name,
          term.name AS term_name
@@ -48,6 +49,14 @@ const buildConditions = (filters: ReportCardFilters, builder: ParamBuilder): str
 
   if (filters.studentId !== undefined) {
     conditions.push(`rc.student_id = ${builder.add(filters.studentId)}`);
+  }
+
+  if (filters.parentId !== undefined) {
+    conditions.push(
+      `EXISTS (SELECT 1 FROM student_parents sp
+                WHERE sp.student_id = rc.student_id
+                  AND sp.parent_id = ${builder.add(filters.parentId)})`,
+    );
   }
 
   if (filters.status) {

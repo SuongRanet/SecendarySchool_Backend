@@ -127,7 +127,7 @@ export const listSchedule = asyncHandler(async (req: Request, res: Response) => 
 
 export const listMyAssignments = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query as unknown as TeacherScopeQuery;
-  const assignments = await service.listAssignments(requireTeacherId(req), query.academicYearId);
+  const assignments = await service.listMyAssignments(requireTeacherId(req), query.academicYearId);
 
   return sendSuccess(res, assignments, 'Teacher assignments loaded successfully');
 });

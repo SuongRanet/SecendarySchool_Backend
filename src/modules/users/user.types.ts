@@ -18,6 +18,8 @@ export interface UserListRow extends Omit<UserRow, 'password_hash'> {
   roles: RoleCode[] | null;
   full_name: string | null;
   profile_type: 'TEACHER' | 'STUDENT' | 'PARENT' | null;
+  /** The school code — STU-…, TCH-… or PAR-… — as printed on a card. */
+  profile_code: string | null;
 }
 
 export interface RoleSummary {

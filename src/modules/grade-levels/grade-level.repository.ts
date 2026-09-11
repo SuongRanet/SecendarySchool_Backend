@@ -1,7 +1,7 @@
 import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import { buildSearchPattern } from '../../utils/pagination';
-import { buildUpdateSet, ParamBuilder } from '../../utils/sql';
+import { ACTIVE_YEAR, buildUpdateSet, ParamBuilder } from '../../utils/sql';
 import type {
   CreateGradeLevelInput,
   GradeLevelFilters,
@@ -9,13 +9,23 @@ import type {
   UpdateGradeLevelInput,
 } from './grade-level.types';
 
+/*
+ * Both figures describe the year the school is in.
+ *
+ * A grade level outlives the years it is taught in, so counting its classes
+ * across all of them showed Grade 7 with six sections -- this year's three on
+ * top of last year's three -- for a school that has never run more than three.
+ */
 const COUNT_SELECT = `
   (SELECT COUNT(*)::int FROM classes c
-    WHERE c.grade_level_id = g.id AND c.deleted_at IS NULL) AS class_count,
+    WHERE c.grade_level_id = g.id AND c.deleted_at IS NULL
+      AND c.academic_year_id = ${ACTIVE_YEAR}) AS class_count,
   (SELECT COUNT(DISTINCT e.student_id)::int
      FROM enrollments e
      JOIN classes c2 ON c2.id = e.class_id
-    WHERE c2.grade_level_id = g.id AND e.status = 'ACTIVE') AS student_count
+    WHERE c2.grade_level_id = g.id AND e.status = 'ACTIVE'
+      AND c2.deleted_at IS NULL
+      AND c2.academic_year_id = ${ACTIVE_YEAR}) AS student_count
 `;
 
 export const findGradeLevels = async (filters: GradeLevelFilters): Promise<GradeLevelRow[]> => {

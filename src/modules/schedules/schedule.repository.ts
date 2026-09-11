@@ -287,3 +287,62 @@ export const findScheduleForDay = async (
 
   return result.rows;
 };
+
+/**
+ * Periods where moving a class subject to another teacher would double-book
+ * them: the teacher is already standing in a different class at that hour.
+ *
+ * Reassigning a subject has to carry the timetable with it, and the timetable
+ * is only worth anything while it stays conflict-free, so this is checked
+ * before anything moves.
+ */
+export const findTeacherClashesForReassignment = async (
+  classId: number,
+  subjectId: number,
+  newTeacherId: number,
+  executor: Queryable = pool,
+): Promise<{ day_of_week: string; period_number: number | null; class_name: string; subject_name: string }[]> => {
+  const result = await executor.query<{
+    day_of_week: string;
+    period_number: number | null;
+    class_name: string;
+    subject_name: string;
+  }>(
+    `SELECT busy.day_of_week::text AS day_of_week,
+            busy.period_number,
+            c.name AS class_name,
+            s.name_en AS subject_name
+       FROM schedules moving
+       JOIN schedules busy
+         ON busy.day_of_week = moving.day_of_week
+        AND busy.period_number IS NOT DISTINCT FROM moving.period_number
+        AND busy.teacher_id = $3
+        AND busy.id <> moving.id
+        AND busy.is_active
+       JOIN classes c ON c.id = busy.class_id
+       JOIN subjects s ON s.id = busy.subject_id
+      WHERE moving.class_id = $1
+        AND moving.subject_id = $2
+        AND moving.is_active
+      ORDER BY busy.day_of_week, busy.period_number`,
+    [classId, subjectId, newTeacherId],
+  );
+
+  return result.rows;
+};
+
+/** Moves every period of a class subject onto the teacher now responsible for it. */
+export const reassignScheduleTeacher = async (
+  classId: number,
+  subjectId: number,
+  teacherId: number | null,
+  executor: Queryable = pool,
+): Promise<number> => {
+  const result = await executor.query(
+    `UPDATE schedules SET teacher_id = $3
+      WHERE class_id = $1 AND subject_id = $2 AND is_active`,
+    [classId, subjectId, teacherId],
+  );
+
+  return result.rowCount ?? 0;
+};

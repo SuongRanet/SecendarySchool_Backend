@@ -56,6 +56,8 @@ export const summaryQuerySchema = z.object({
   academicYearId: z.coerce.number().int().positive().optional(),
   dateFrom: optionalDateSchema,
   dateTo: optionalDateSchema,
+  /** The single day `/attendance/today` reports on; defaults to today. */
+  date: optionalDateSchema,
 });
 
 export const trendQuerySchema = z.object({

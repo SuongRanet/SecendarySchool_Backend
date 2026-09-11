@@ -534,3 +534,90 @@ export const enrollmentStatsByGrade = async (academicYearId: number) =>
 
 export const enrollmentStatsByClass = async (academicYearId: number) =>
   repository.countEnrollmentsByClass(academicYearId);
+
+/**
+ * Graduates the pupils of the exit grade at the end of a year.
+ *
+ * Promotion moves a cohort up a grade; this is what happens to the cohort that
+ * has no grade left to move to. `grade_levels.is_exit_grade` decides who that
+ * is, so the rule follows the curriculum rather than a hard-coded grade code —
+ * a school that later adds a Grade 10 moves the flag and nothing else changes.
+ *
+ * Each pupil gets `students.status = GRADUATED` and their enrolment is closed as
+ * COMPLETED on the last day of the year. Both halves matter: the enrolment is
+ * what puts a pupil on a roster, a register and a report card, so leaving it
+ * open would keep a leaver appearing everywhere, while leaving the student
+ * status ACTIVE would make them look like they are still attending.
+ */
+export const graduateExitGrade = async (
+  input: { academicYearId: number; excludeStudentIds?: number[] },
+  context: AuditContext,
+): Promise<{ graduated: number; skipped: number; classes: string[] }> => {
+  const year = await academicYearRepository.findAcademicYearById(input.academicYearId);
+
+  if (!year) {
+    throw AppError.badRequest('The selected academic year does not exist', 'ACADEMIC_YEAR_NOT_FOUND');
+  }
+
+  if (year.status === 'CLOSED') {
+    throw AppError.conflict(
+      'That academic year is closed. Graduate the cohort before closing the year.',
+      'ACADEMIC_YEAR_CLOSED',
+    );
+  }
+
+  const excluded = new Set(input.excludeStudentIds ?? []);
+
+  return withTransaction(async (client) => {
+    const leavers = await repository.findExitGradeEnrollments(input.academicYearId, client);
+
+    if (leavers.length === 0) {
+      throw AppError.badRequest(
+        `No pupil in ${year.name} is enrolled in a grade marked as the exit grade`,
+        'NO_EXIT_GRADE_STUDENTS',
+      );
+    }
+
+    const classes = new Set<string>();
+    let graduated = 0;
+    let skipped = 0;
+
+    for (const leaver of leavers) {
+      if (excluded.has(leaver.student_id)) {
+        skipped += 1;
+        continue;
+      }
+
+      await repository.closeEnrollment(
+        leaver.id,
+        'COMPLETED',
+        year.end_date,
+        `Completed ${leaver.grade_level_name} and left the school`,
+        client,
+      );
+
+      await client.query(
+        `UPDATE students SET status = 'GRADUATED'::student_status WHERE id = $1`,
+        [leaver.student_id],
+      );
+
+      classes.add(leaver.class_name);
+      graduated += 1;
+    }
+
+    await auditService.record(
+      {
+        userId: context.userId,
+        action: 'UPDATE',
+        entityType: 'enrollment',
+        description: `Graduated ${graduated} pupil(s) from ${year.name}`,
+        newValue: { graduated, skipped, classes: [...classes] },
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      },
+      client,
+    );
+
+    return { graduated, skipped, classes: [...classes].sort() };
+  });
+};

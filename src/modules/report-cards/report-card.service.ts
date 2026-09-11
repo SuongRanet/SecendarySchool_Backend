@@ -1,5 +1,10 @@
 import { withTransaction } from '../../database/connection';
-import type { AuditContext, PaginatedResult, PaginationParams } from '../../types';
+import type {
+  AuditContext,
+  AuthenticatedUser,
+  PaginatedResult,
+  PaginationParams,
+} from '../../types';
 import { AppError } from '../../utils/app-error';
 import * as auditService from '../audit/audit.service';
 import * as academicYearRepository from '../academic-years/academic-year.repository';
@@ -8,6 +13,8 @@ import * as classRepository from '../classes/class.repository';
 import * as enrollmentRepository from '../enrollments/enrollment.repository';
 import * as gradeRepository from '../grades/grade.repository';
 import * as gradeService from '../grades/grade.service';
+import * as teacherRepository from '../teachers/teacher.repository';
+import { isElevated } from '../../middleware/role.middleware';
 import * as repository from './report-card.repository';
 import type {
   GenerateReportCardsInput,
@@ -51,6 +58,7 @@ const toDto = (row: ReportCardRow, subjects: ReportCardSubjectRow[]): ReportCard
   classId: row.class_id,
   className: row.class_name ?? '',
   gradeLevelName: row.grade_level_name ?? '',
+  homeroomTeacherId: row.homeroom_teacher_id ?? null,
   homeroomTeacherName: row.homeroom_teacher_name ?? null,
   totalScore: row.total_score,
   averageScore: row.average_score,
@@ -125,12 +133,28 @@ export const getForStudent = async (
  */
 export const generate = async (
   input: GenerateReportCardsInput,
+  user: AuthenticatedUser,
   context: AuditContext,
 ): Promise<ReportCardDto[]> => {
   const classRow = await classRepository.findClassById(input.classId);
 
   if (!classRow) {
     throw AppError.notFound('Class not found', 'CLASS_NOT_FOUND');
+  }
+
+  // The permission is shared with the office, so the class still has to be the
+  // teacher's own.
+  if (!isElevated(user)) {
+    const isHomeroom = user.teacherId
+      ? await teacherRepository.isHomeroomTeacherOf(user.teacherId, input.classId)
+      : false;
+
+    if (!isHomeroom) {
+      throw AppError.forbidden(
+        'You may only generate report cards for your own homeroom class',
+        'REPORT_CARD_GENERATE_DENIED',
+      );
+    }
   }
 
   const year = await academicYearRepository.findAcademicYearById(classRow.academic_year_id);
@@ -274,9 +298,61 @@ export const generate = async (
   return Promise.all(generatedIds.map((id) => getById(id)));
 };
 
+/**
+ * Which part of a report card a writer owns.
+ *
+ * The office and the principal may write anywhere. A homeroom teacher owns the
+ * homeroom comment on their own class and nothing else — the subject remarks
+ * belong to the subject teachers and the principal's line to the principal, so
+ * those are dropped rather than refused, which keeps a partial save working.
+ *
+ * Kept free of database access so the rule itself can be tested directly; the
+ * caller supplies the two facts it needs.
+ */
+export const narrowComments = (
+  writer: { isOffice: boolean; isHomeroomTeacher: boolean },
+  input: UpdateReportCardInput,
+): UpdateReportCardInput => {
+  if (writer.isOffice) {
+    return input;
+  }
+
+  if (!writer.isHomeroomTeacher) {
+    throw AppError.forbidden(
+      'You may only comment on the report cards of your own homeroom class',
+      'REPORT_CARD_COMMENT_DENIED',
+    );
+  }
+
+  if (input.homeroomComment === undefined) {
+    throw AppError.forbidden(
+      'A homeroom teacher may only write the homeroom comment',
+      'REPORT_CARD_COMMENT_DENIED',
+    );
+  }
+
+  return { homeroomComment: input.homeroomComment };
+};
+
+const narrowCommentsToScope = async (
+  user: AuthenticatedUser,
+  classId: number,
+  input: UpdateReportCardInput,
+): Promise<UpdateReportCardInput> =>
+  narrowComments(
+    {
+      isOffice: isElevated(user),
+      isHomeroomTeacher: user.teacherId
+        ? await teacherRepository.isHomeroomTeacherOf(user.teacherId, classId)
+        : false,
+    },
+    input,
+  );
+
 export const updateComments = async (
   id: number,
   input: UpdateReportCardInput,
+  user: AuthenticatedUser,
   context: AuditContext,
 ): Promise<ReportCardDto> => {
   const existing = await repository.findReportCardById(id);
@@ -285,10 +361,12 @@ export const updateComments = async (
     throw AppError.notFound('Report card not found', 'REPORT_CARD_NOT_FOUND');
   }
 
-  await withTransaction(async (client) => {
-    await repository.updateComments(id, input, client);
+  const scoped = await narrowCommentsToScope(user, existing.class_id, input);
 
-    for (const subjectComment of input.subjectComments ?? []) {
+  await withTransaction(async (client) => {
+    await repository.updateComments(id, scoped, client);
+
+    for (const subjectComment of scoped.subjectComments ?? []) {
       await repository.updateSubjectComment(
         id,
         subjectComment.subjectId,

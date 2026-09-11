@@ -73,5 +73,11 @@ export type TransferEnrollmentBody = z.infer<typeof transferEnrollmentSchema>;
 export type WithdrawEnrollmentBody = z.infer<typeof withdrawEnrollmentSchema>;
 export type UpdateEnrollmentBody = z.infer<typeof updateEnrollmentSchema>;
 export type ListEnrollmentsQuery = z.infer<typeof listEnrollmentsQuerySchema>;
+export const graduateCohortSchema = z.object({
+  academicYearId: z.coerce.number().int().positive(),
+  excludeStudentIds: z.array(z.coerce.number().int().positive()).max(2000).optional(),
+});
+
 export type PromoteCohortBody = z.infer<typeof promoteCohortSchema>;
+export type GraduateCohortBody = z.infer<typeof graduateCohortSchema>;
 export type EnrollmentStatsQuery = z.infer<typeof enrollmentStatsQuerySchema>;

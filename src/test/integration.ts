@@ -182,6 +182,64 @@ export const cleanup = async (ids: {
     ['DELETE FROM rooms WHERE id = ANY($1::int[])', ids.roomIds],
     ['DELETE FROM grade_subjects WHERE grade_level_id = ANY($1::int[])', ids.gradeLevelIds],
     ['DELETE FROM grade_levels WHERE id = ANY($1::int[])', ids.gradeLevelIds],
+    /*
+     * Everything else still hanging off the fixture's year.
+     *
+     * A suite often creates more than the fixture handed it — a second class, an
+     * assignment, a register — and those rows keep the year alive. The year
+     * delete then fails, silently by design, and the abandoned year blocks the
+     * next suite that wants the same window, because academic years may not
+     * overlap. Three separate runs were derailed by a stale year before this was
+     * traced. These steps are scoped to the fixture's own year, so they can
+     * only ever remove what the test itself created.
+     */
+    [
+      `DELETE FROM submissions WHERE assignment_id IN
+         (SELECT id FROM assignments WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    ['DELETE FROM assignments WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    [
+      `DELETE FROM exam_results WHERE exam_id IN
+         (SELECT id FROM exams WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    ['DELETE FROM exams WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    [
+      `DELETE FROM report_card_subjects WHERE report_card_id IN
+         (SELECT id FROM report_cards WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    ['DELETE FROM report_cards WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    [
+      `DELETE FROM grade_history WHERE grade_id IN
+         (SELECT id FROM grades WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    ['DELETE FROM grades WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    [
+      `DELETE FROM assessment_results WHERE assessment_id IN
+         (SELECT id FROM assessments WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    ['DELETE FROM assessments WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    ['DELETE FROM student_behaviors WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    ['DELETE FROM student_comments WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    ['DELETE FROM announcements WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    ['DELETE FROM attendance WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    ['DELETE FROM enrollments WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    ['DELETE FROM schedules WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
+    [
+      `DELETE FROM class_subjects WHERE class_id IN
+         (SELECT id FROM classes WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    [
+      `DELETE FROM teacher_classes WHERE class_id IN
+         (SELECT id FROM classes WHERE academic_year_id = ANY($1::int[]))`,
+      ids.academicYearIds,
+    ],
+    ['DELETE FROM classes WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
     ['DELETE FROM academic_terms WHERE academic_year_id = ANY($1::int[])', ids.academicYearIds],
     ['DELETE FROM academic_years WHERE id = ANY($1::int[])', ids.academicYearIds],
   ];

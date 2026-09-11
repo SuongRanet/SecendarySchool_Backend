@@ -73,9 +73,6 @@ export const PERMISSIONS = {
   EXAMS_VIEW: 'exams.view',
   EXAMS_MANAGE: 'exams.manage',
 
-  NATIONAL_EXAMS_VIEW: 'national_exams.view',
-  NATIONAL_EXAMS_MANAGE: 'national_exams.manage',
-  NATIONAL_EXAMS_PUBLISH: 'national_exams.publish',
 
   GRADES_VIEW: 'grades.view',
   GRADES_ENTER: 'grades.enter',
@@ -191,9 +188,6 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
 
   define(PERMISSIONS.EXAMS_VIEW, 'View exams'),
   define(PERMISSIONS.EXAMS_MANAGE, 'Manage exams'),
-  define(PERMISSIONS.NATIONAL_EXAMS_VIEW, 'View national examination registrations and results'),
-  define(PERMISSIONS.NATIONAL_EXAMS_MANAGE, 'Manage national examination sessions and registrations'),
-  define(PERMISSIONS.NATIONAL_EXAMS_PUBLISH, 'Publish and amend national examination results'),
 
   define(PERMISSIONS.GRADES_VIEW, 'View grades'),
   define(PERMISSIONS.GRADES_ENTER, 'Enter grades'),
@@ -277,15 +271,21 @@ const ADMIN_PERMISSIONS: PermissionCode[] = [
   PERMISSIONS.ASSESSMENTS_GRADE,
   PERMISSIONS.EXAMS_VIEW,
   PERMISSIONS.EXAMS_MANAGE,
-  PERMISSIONS.NATIONAL_EXAMS_VIEW,
   PERMISSIONS.GRADES_VIEW,
   PERMISSIONS.GRADES_ENTER,
   PERMISSIONS.GRADES_UPDATE_ANY,
   PERMISSIONS.REPORT_CARDS_VIEW,
   PERMISSIONS.REPORT_CARDS_GENERATE,
   PERMISSIONS.REPORT_CARDS_PUBLISH,
-  PERMISSIONS.ASSIGNMENTS_VIEW,
-  PERMISSIONS.ASSIGNMENTS_MANAGE,
+  /*
+   * Homework is deliberately absent.
+   *
+   * It is a conversation between a teacher and their pupils: the teacher sets
+   * it and marks it, the pupil hands it in, and the guardian follows their own
+   * child's. The office neither sets homework nor answers for it, and giving
+   * every administrator a list of every child's unfinished work is an intrusion
+   * that buys nothing. SUPER_ADMIN keeps it as the break-glass role.
+   */
   PERMISSIONS.BEHAVIORS_VIEW,
   PERMISSIONS.BEHAVIORS_MANAGE,
   PERMISSIONS.ANNOUNCEMENTS_VIEW,
@@ -315,7 +315,9 @@ const PRINCIPAL_PERMISSIONS: PermissionCode[] = [
   PERMISSIONS.GRADES_VIEW,
   PERMISSIONS.REPORT_CARDS_VIEW,
   PERMISSIONS.REPORT_CARDS_PUBLISH,
-  PERMISSIONS.ASSIGNMENTS_VIEW,
+  // Homework is left to the teachers, as above. A principal reviewing a
+  // teacher's workload sees it through the dashboard rather than by reading
+  // every class's homework list.
   PERMISSIONS.BEHAVIORS_VIEW,
   PERMISSIONS.ANNOUNCEMENTS_VIEW,
   PERMISSIONS.ANNOUNCEMENTS_MANAGE,
@@ -341,7 +343,6 @@ const TEACHER_PERMISSIONS: PermissionCode[] = [
   PERMISSIONS.ASSESSMENTS_GRADE,
   PERMISSIONS.EXAMS_VIEW,
   PERMISSIONS.EXAMS_MANAGE,
-  PERMISSIONS.NATIONAL_EXAMS_VIEW,
   PERMISSIONS.GRADES_VIEW,
   PERMISSIONS.GRADES_ENTER,
   PERMISSIONS.REPORT_CARDS_VIEW,
@@ -372,7 +373,6 @@ const PARENT_PERMISSIONS: PermissionCode[] = [
   PERMISSIONS.BEHAVIORS_VIEW,
   PERMISSIONS.ANNOUNCEMENTS_VIEW,
   PERMISSIONS.NOTIFICATIONS_VIEW,
-  PERMISSIONS.NATIONAL_EXAMS_VIEW,
   PERMISSIONS.DASHBOARD_PARENT,
 ];
 
@@ -387,7 +387,6 @@ const STUDENT_PERMISSIONS: PermissionCode[] = [
   PERMISSIONS.REPORT_CARDS_VIEW,
   PERMISSIONS.ANNOUNCEMENTS_VIEW,
   PERMISSIONS.NOTIFICATIONS_VIEW,
-  PERMISSIONS.NATIONAL_EXAMS_VIEW,
   PERMISSIONS.DASHBOARD_STUDENT,
 ];
 

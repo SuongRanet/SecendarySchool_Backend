@@ -362,3 +362,65 @@ export const markOverdueAsMissing = async (executor: Queryable = pool): Promise<
 
   return result.rowCount ?? 0;
 };
+
+/**
+ * Who an uploaded attachment belongs to, so the download route can apply the
+ * same rule as the record the file hangs off.
+ *
+ * A file referenced by a submission is the student's work; one referenced by an
+ * assignment is the teacher's brief, readable by everyone in that class.
+ */
+export const findAttachmentOwner = async (
+  url: string,
+  executor: Queryable = pool,
+): Promise<{ kind: 'submission'; studentId: number } | { kind: 'assignment'; classId: number } | null> => {
+  const submission = await executor.query<{ student_id: number }>(
+    'SELECT student_id FROM submissions WHERE attachment_url = $1 LIMIT 1',
+    [url],
+  );
+
+  if (submission.rows[0]) {
+    return { kind: 'submission', studentId: submission.rows[0].student_id };
+  }
+
+  const assignment = await executor.query<{ class_id: number }>(
+    'SELECT class_id FROM assignments WHERE attachment_url = $1 AND deleted_at IS NULL LIMIT 1',
+    [url],
+  );
+
+  if (assignment.rows[0]) {
+    return { kind: 'assignment', classId: assignment.rows[0].class_id };
+  }
+
+  return null;
+};
+
+/**
+ * True when the requester sits in, or has a child in, this class — the rule for
+ * reading the brief a teacher attached to an assignment.
+ */
+export const isInClass = async (
+  studentId: number | null,
+  parentId: number | null,
+  classId: number,
+  executor: Queryable = pool,
+): Promise<boolean> => {
+  if (studentId === null && parentId === null) {
+    return false;
+  }
+
+  const result = await executor.query<{ present: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+         FROM enrollments e
+    LEFT JOIN student_parents sp ON sp.student_id = e.student_id
+        WHERE e.class_id = $3
+          AND e.status = 'ACTIVE'
+          AND (($1::bigint IS NOT NULL AND e.student_id = $1::bigint)
+            OR ($2::bigint IS NOT NULL AND sp.parent_id = $2::bigint))
+     ) AS present`,
+    [studentId, parentId, classId],
+  );
+
+  return result.rows[0]?.present ?? false;
+};

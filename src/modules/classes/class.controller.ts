@@ -116,9 +116,25 @@ export const archive = asyncHandler(async (req: Request, res: Response) => {
 
 export const listSubjects = asyncHandler(async (req: Request, res: Response) => {
   const classId = Number(req.params.id);
+  const query = req.query as unknown as { mine?: boolean };
+  const user = requireUser(req);
+
   await assertClassReadAccess(req, classId);
 
-  const subjects = await service.listSubjects(classId);
+  /**
+   * `mine=true` asks for the subjects this teacher may write to, rather than
+   * everything the class is taught.
+   *
+   * It is opt-in because the same endpoint answers both questions: the class
+   * page prints the full curriculum, while a mark sheet must offer only what
+   * the teacher can save. An elevated user asking for "mine" still gets all of
+   * them, because they may grade any subject.
+   */
+  const scopeToTeacher = query.mine === true && !isElevated(user) && user.teacherId
+    ? user.teacherId
+    : undefined;
+
+  const subjects = await service.listSubjects(classId, scopeToTeacher);
 
   return sendSuccess(res, subjects, 'Class subjects loaded successfully');
 });

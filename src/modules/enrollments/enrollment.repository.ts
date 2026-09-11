@@ -2,7 +2,7 @@ import { pool } from '../../database/connection';
 import type { Queryable } from '../../database/connection';
 import type { PaginatedResult, PaginationParams, SortParams } from '../../types';
 import { buildSearchPattern } from '../../utils/pagination';
-import { ParamBuilder } from '../../utils/sql';
+import { ENROLLED_IN_YEAR, ParamBuilder } from '../../utils/sql';
 import type {
   CreateEnrollmentInput,
   EnrollmentFilters,
@@ -278,7 +278,8 @@ export const countEnrollmentsByGrade = async (
        LEFT JOIN classes c ON c.grade_level_id = g.id
                           AND c.academic_year_id = $1
                           AND c.deleted_at IS NULL
-       LEFT JOIN enrollments e ON e.class_id = c.id AND e.status = 'ACTIVE'
+       LEFT JOIN enrollments e ON e.class_id = c.id
+                              AND e.status::text IN ${ENROLLED_IN_YEAR}
       WHERE g.deleted_at IS NULL
       GROUP BY g.id, g.name_en, g.level_order
       ORDER BY g.level_order ASC`,
@@ -300,11 +301,46 @@ export const countEnrollmentsByClass = async (
     `SELECT c.id AS "classId", c.name AS "className", c.capacity,
             COUNT(e.id)::int AS count
        FROM classes c
-       LEFT JOIN enrollments e ON e.class_id = c.id AND e.status = 'ACTIVE'
+       LEFT JOIN enrollments e ON e.class_id = c.id
+                              AND e.status::text IN ${ENROLLED_IN_YEAR}
        JOIN grade_levels g ON g.id = c.grade_level_id
       WHERE c.academic_year_id = $1 AND c.deleted_at IS NULL
       GROUP BY c.id, c.name, c.capacity, g.level_order
       ORDER BY g.level_order ASC, c.name ASC`,
+    [academicYearId],
+  );
+
+  return result.rows;
+};
+
+/**
+ * Active enrolments in a year that sit in an exit grade.
+ *
+ * `grade_levels.is_exit_grade` marks the last grade of the school's cycle, and
+ * this is the query that finally acts on it: those pupils leave at the end of
+ * the year rather than moving up, so year-end has to treat them differently from
+ * everybody else.
+ */
+export const findExitGradeEnrollments = async (
+  academicYearId: number,
+  executor: Queryable = pool,
+): Promise<
+  { id: number; student_id: number; class_id: number; class_name: string; grade_level_name: string }[]
+> => {
+  const result = await executor.query<{
+    id: number; student_id: number; class_id: number;
+    class_name: string; grade_level_name: string;
+  }>(
+    `SELECT e.id, e.student_id, e.class_id, c.name AS class_name, g.name_en AS grade_level_name
+       FROM enrollments e
+       JOIN classes c ON c.id = e.class_id
+       JOIN grade_levels g ON g.id = c.grade_level_id
+       JOIN students s ON s.id = e.student_id
+      WHERE e.academic_year_id = $1
+        AND e.status = 'ACTIVE'
+        AND g.is_exit_grade
+        AND s.deleted_at IS NULL
+      ORDER BY c.name, e.roll_number`,
     [academicYearId],
   );
 

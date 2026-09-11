@@ -6,6 +6,7 @@ import * as auditService from '../audit/audit.service';
 import * as academicYearService from '../academic-years/academic-year.service';
 import * as gradeLevelRepository from '../grade-levels/grade-level.repository';
 import * as roomRepository from '../rooms/room.repository';
+import * as scheduleRepository from '../schedules/schedule.repository';
 import * as subjectRepository from '../subjects/subject.repository';
 import * as teacherRepository from '../teachers/teacher.repository';
 import * as repository from './class.repository';
@@ -339,10 +340,13 @@ export const archive = async (id: number, context: AuditContext): Promise<void> 
 // Class subjects
 // ---------------------------------------------------------------------------
 
-export const listSubjects = async (classId: number): Promise<ClassSubjectDto[]> => {
+export const listSubjects = async (
+  classId: number,
+  teacherId?: number,
+): Promise<ClassSubjectDto[]> => {
   await getById(classId);
 
-  const rows = await repository.findClassSubjects(classId);
+  const rows = await repository.findClassSubjects(classId, teacherId);
   return rows.map(toSubjectDto);
 };
 
@@ -367,8 +371,52 @@ export const assignSubject = async (
     }
   }
 
+  /**
+   * Changing who teaches a subject has to carry the timetable with it.
+   *
+   * The assignment and the timetable are two records of the same fact, and
+   * updating only the assignment left the periods showing the teacher who used
+   * to take them — the class list said one name, the timetable another.
+   *
+   * The move is refused outright when the incoming teacher is already standing
+   * in another class at one of those hours. A timetable that is only sometimes
+   * conflict-free is worth nothing, so the clashes are named and the whole
+   * change is left undone rather than half applied.
+   */
+  const existingAssignment = await repository.findClassSubjectPair(classId, input.subjectId);
+  const teacherChanged =
+    existingAssignment != null && (existingAssignment.teacher_id ?? null) !== (input.teacherId ?? null);
+
+  if (teacherChanged && input.teacherId) {
+    const clashes = await scheduleRepository.findTeacherClashesForReassignment(
+      classId,
+      input.subjectId,
+      input.teacherId,
+    );
+
+    if (clashes.length > 0) {
+      const where = clashes
+        .map((clash) => `${clash.day_of_week} period ${clash.period_number ?? '-'} (${clash.class_name} ${clash.subject_name})`)
+        .join(', ');
+
+      throw AppError.conflict(
+        `This teacher already teaches another class at: ${where}. Move those periods first, or change the timetable for this subject.`,
+        'TEACHER_SCHEDULE_CONFLICT',
+      );
+    }
+  }
+
   const saved = await withTransaction(async (client) => {
     const row = await repository.upsertClassSubject(classId, input, client);
+
+    if (teacherChanged) {
+      await scheduleRepository.reassignScheduleTeacher(
+        classId,
+        input.subjectId,
+        input.teacherId ?? null,
+        client,
+      );
+    }
 
     if (input.teacherId) {
       await client.query(

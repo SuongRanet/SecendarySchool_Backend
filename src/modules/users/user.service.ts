@@ -174,10 +174,6 @@ export const update = async (
   return getById(id);
 };
 
-/**
- * Changes an account status. The last active super administrator can never be
- * disabled, otherwise the system would lock everybody out.
- */
 export const changeStatus = async (
   id: number,
   status: UserStatus,
@@ -315,10 +311,6 @@ export const assignRoles = async (
   return getById(id);
 };
 
-/**
- * Administrative password reset. When no password is supplied a temporary one is
- * generated and returned once so the administrator can hand it to the user.
- */
 export const resetPassword = async (
   id: number,
   password: string | undefined,

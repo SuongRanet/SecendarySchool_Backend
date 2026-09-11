@@ -42,12 +42,18 @@ const envSchema = z.object({
   SMTP_SECURE: booleanFromString.default(false),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  MAIL_FROM_NAME: z.string().default('Hun Sen Turi Secondary School'),
+  MAIL_FROM_NAME: z.string().default('Hun Sen Turey Secondary School'),
   MAIL_FROM_ADDRESS: z.string().optional(),
 
   /** Length and lifetime of the emailed password reset code. */
   PASSWORD_RESET_CODE_LENGTH: z.coerce.number().int().min(4).max(10).default(6),
   PASSWORD_RESET_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+
+  // Homework attachments. Files live on disk rather than in the database: a
+  // photograph of a page of exercises is large, is never queried, and is always
+  // served whole.
+  UPLOAD_DIR: z.string().default('uploads'),
+  MAX_UPLOAD_MB: z.coerce.number().positive().max(50).default(10),
 
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
@@ -75,6 +81,11 @@ export const env = {
   isTest: raw.NODE_ENV === 'test',
   /** True when SMTP is configured; otherwise mail is written to the log. */
   mailEnabled: Boolean(raw.SMTP_HOST && raw.SMTP_USER && raw.SMTP_PASSWORD),
+  /** Absolute path to the upload directory, resolved once at start-up. */
+  uploadDir: path.isAbsolute(raw.UPLOAD_DIR)
+    ? raw.UPLOAD_DIR
+    : path.resolve(process.cwd(), raw.UPLOAD_DIR),
+  maxUploadBytes: Math.round(raw.MAX_UPLOAD_MB * 1024 * 1024),
   /** CORS_ORIGIN supports a comma separated list of allowed origins. */
   corsOrigins: raw.CORS_ORIGIN.split(',')
     .map((origin) => origin.trim())

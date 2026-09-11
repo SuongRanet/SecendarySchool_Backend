@@ -133,14 +133,14 @@ export const trend = asyncHandler(async (req: Request, res: Response) => {
   return sendSuccess(res, points, 'Attendance trend loaded successfully');
 });
 
-export const todayOverview = asyncHandler(async (req: Request, res: Response) => {
+export const dayOverview = asyncHandler(async (req: Request, res: Response) => {
   const query = req.query as unknown as SummaryQuery;
   const academicYearId =
     query.academicYearId ?? (await academicYearService.requireActiveYear()).id;
 
-  const overview = await service.todayOverview(academicYearId);
+  const overview = await service.dayOverview(academicYearId, query.date ?? undefined);
 
-  return sendSuccess(res, overview, "Today's attendance loaded successfully");
+  return sendSuccess(res, overview, 'Attendance for the day loaded successfully');
 });
 
 export const missing = asyncHandler(async (req: Request, res: Response) => {

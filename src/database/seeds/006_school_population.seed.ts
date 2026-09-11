@@ -3,15 +3,19 @@ import { hashPassword } from '../../utils/password';
 import { logger } from '../../utils/logger';
 
 /**
- * A full year group for Hun Sen Turi Secondary School: eleven classes, the
- * teachers to staff them, 267 students and the families behind them.
+ * A full year group for Hun Sen Turey Secondary School: eight classes, the
+ * staff who run them, 267 students and the families behind them.
  *
- * The numbers are not arbitrary. Teaching load drives the staff count, and the
- * family structure mirrors a real intake, where a sizeable minority of students
- * have a brother or sister in the same school and a guardian therefore appears
- * against two records.
+ * The staff are real. Their names, subjects and posts come from the school's
+ * examination board appointment, so the director, the deputy
+ * director and all fourteen teachers here are the people who actually hold
+ * those jobs. Only the students and their guardians are generated.
  *
- * Everything is generated from a fixed seed, so running this twice produces the
+ * The pupil numbers are not arbitrary either: the family structure mirrors a
+ * real intake, where a sizeable minority of students have a brother or sister in
+ * the same school and a guardian therefore appears against two records.
+ *
+ * The generated half comes from a fixed seed, so running this twice produces the
  * same school rather than a second, different one.
  */
 
@@ -60,43 +64,88 @@ const FAMILY_NAMES: [string, string][] = [
  */
 const PERIODS_PER_WEEK: Record<string, number> = {
   KHM: 6, MATH: 6, ENG: 3, PHY: 2, CHEM: 2, BIO: 2,
-  EARTH: 1, HIST: 2, GEO: 2, CIVIC: 2, ICT: 2, PE: 2,
+  EARTH: 1, HIST: 2, GEO: 2, CIVIC: 2,
 };
 
 /**
- * The teaching staff. A specialist covers related subjects — the science
- * teachers take physics, chemistry and earth science between them, the social
- * studies teachers take history, geography and civics — which is what brings
- * the requirement down from 27 single-subject teachers to 20.
+ * The school's leadership, from the Grade 9 examination board appointment.
+ *
+ * The director chairs the examination centre and the deputy director is its
+ * vice chair. In this system the director holds the principal's role; the deputy
+ * holds the administrator's, because the day-to-day office work — enrolments,
+ * timetables, records — is theirs.
  */
-const TEACHER_SPECIALISATIONS: { subjects: string[]; count: number; label: string }[] = [
-  // 66 periods over 4 teachers -> about 16 or 17 each
-  { subjects: ['KHM'], count: 4, label: 'Khmer Literature' },
-  { subjects: ['MATH'], count: 4, label: 'Mathematics' },
-  // 33 periods over 2
-  { subjects: ['ENG'], count: 2, label: 'English' },
-  // The sciences are taught by one department of four: 77 periods between them
-  { subjects: ['PHY', 'CHEM', 'BIO', 'EARTH'], count: 4, label: 'Science' },
-  // History, geography and civics likewise: 66 periods over 4
-  { subjects: ['HIST', 'GEO', 'CIVIC'], count: 4, label: 'Social Studies' },
-  // Single-subject specialists, who carry every class and so run heavier
-  { subjects: ['ICT'], count: 1, label: 'ICT' },
-  { subjects: ['PE'], count: 1, label: 'Physical Education' },
+const LEADERSHIP: {
+  username: string;
+  firstEn: string; lastEn: string;
+  firstKh: string; lastKh: string;
+  gender: 'MALE' | 'FEMALE';
+  role: 'PRINCIPAL' | 'ADMIN';
+  title: string;
+}[] = [
+  {
+    username: 'peng.angsum',
+    firstEn: 'Angsum', lastEn: 'Peng', firstKh: 'អាំងស៊ុម', lastKh: 'ប៉េង',
+    gender: 'MALE', role: 'PRINCIPAL', title: 'នាយក',
+  },
+  {
+    username: 'noun.buntha',
+    firstEn: 'Buntha', lastEn: 'Noun', firstKh: 'ប៊ុនថា', lastKh: 'នូន',
+    gender: 'MALE', role: 'ADMIN', title: 'នាយករង',
+  },
 ];
 
-/** Eleven classes: four in Grade 7, four in Grade 8, three in Grade 9. */
+/**
+ * The teaching staff, named from the examination board appointment.
+ *
+ * Ten of them chair a subject's marking committee, which is what fixes who
+ * teaches what. The remaining four sit on the custody committee, which says
+ * nothing about the subject they teach — they are put on Khmer and Mathematics
+ * because those are the only two subjects one person cannot carry alone: six
+ * periods across eight classes is forty-eight a week, and the timetable has only
+ * forty slots in it.
+ */
+const STAFF: {
+  firstEn: string; lastEn: string;
+  firstKh: string; lastKh: string;
+  gender: 'MALE' | 'FEMALE';
+  subject: string;
+  /** Kept so the seed can report who was named for what. */
+  duty: 'marking' | 'custody';
+}[] = [
+  // Marking committee — one chair per examined subject
+  { firstEn: 'Sieloeun', lastEn: 'Leang', firstKh: 'សៀលើន', lastKh: 'លាង', gender: 'MALE', subject: 'KHM', duty: 'marking' },
+  { firstEn: 'Sreysochate', lastEn: 'Pov', firstKh: 'ស្រីសុជាតិ', lastKh: 'ពៅ', gender: 'FEMALE', subject: 'MATH', duty: 'marking' },
+  { firstEn: 'Somunny', lastEn: 'Chan', firstKh: 'សុមុន្នី', lastKh: 'ចាន់', gender: 'MALE', subject: 'PHY', duty: 'marking' },
+  { firstEn: 'Sopheap', lastEn: 'Heng', firstKh: 'សុភាព', lastKh: 'ហេង', gender: 'MALE', subject: 'CHEM', duty: 'marking' },
+  { firstEn: 'Muyaing', lastEn: 'Tang', firstKh: 'មួយអាំង', lastKh: 'តាំង', gender: 'FEMALE', subject: 'BIO', duty: 'marking' },
+  { firstEn: 'Dom', lastEn: 'Say', firstKh: 'ឌុំ', lastKh: 'សាយ', gender: 'MALE', subject: 'EARTH', duty: 'marking' },
+  { firstEn: 'Nisa', lastEn: 'Yan', firstKh: 'នីសា', lastKh: 'យ៉ាន', gender: 'FEMALE', subject: 'GEO', duty: 'marking' },
+  { firstEn: 'Va', lastEn: 'Leam', firstKh: 'វ៉ា', lastKh: 'លាម', gender: 'MALE', subject: 'HIST', duty: 'marking' },
+  { firstEn: 'Panhea', lastEn: 'Muon', firstKh: 'បញ្ញារ', lastKh: 'មួន', gender: 'FEMALE', subject: 'CIVIC', duty: 'marking' },
+  { firstEn: 'Viya', lastEn: 'Aok', firstKh: 'វិយ៉ា', lastKh: 'អោក', gender: 'FEMALE', subject: 'ENG', duty: 'marking' },
+  // Custody committee — the second and third hands on the two heaviest subjects
+  { firstEn: 'Chanthol', lastEn: 'He', firstKh: 'ចាន់ថុល', lastKh: 'ហេ', gender: 'FEMALE', subject: 'KHM', duty: 'custody' },
+  { firstEn: 'Vanny', lastEn: 'Muon', firstKh: 'វ៉ាន់នី', lastKh: 'មួន', gender: 'FEMALE', subject: 'KHM', duty: 'custody' },
+  { firstEn: 'Muykong', lastEn: 'Chap', firstKh: 'មួយគង់', lastKh: 'ចាប', gender: 'MALE', subject: 'MATH', duty: 'custody' },
+  { firstEn: 'Sovannatha', lastEn: 'Sieng', firstKh: 'សុវណ្ណថា', lastKh: 'ស៊ាង', gender: 'MALE', subject: 'MATH', duty: 'custody' },
+];
+
+/**
+ * Eight classes: three in Grade 7, three in Grade 8, two in Grade 9.
+ *
+ * The sizes add up to the school's 267 students. Grade 7 carries the largest
+ * groups because an intake thins out over the cycle rather than growing.
+ */
 const CLASS_PLAN: { code: string; grade: string; size: number }[] = [
-  { code: '7A', grade: 'G7', size: 26 },
-  { code: '7B', grade: 'G7', size: 26 },
-  { code: '7C', grade: 'G7', size: 26 },
-  { code: '7D', grade: 'G7', size: 26 },
-  { code: '8A', grade: 'G8', size: 25 },
-  { code: '8B', grade: 'G8', size: 25 },
-  { code: '8C', grade: 'G8', size: 25 },
-  { code: '8D', grade: 'G8', size: 25 },
-  { code: '9A', grade: 'G9', size: 21 },
-  { code: '9B', grade: 'G9', size: 21 },
-  { code: '9C', grade: 'G9', size: 21 },
+  { code: '7A', grade: 'G7', size: 34 },
+  { code: '7B', grade: 'G7', size: 34 },
+  { code: '7C', grade: 'G7', size: 34 },
+  { code: '8A', grade: 'G8', size: 33 },
+  { code: '8B', grade: 'G8', size: 33 },
+  { code: '8C', grade: 'G8', size: 33 },
+  { code: '9A', grade: 'G9', size: 33 },
+  { code: '9B', grade: 'G9', size: 33 },
 ];
 
 const TOTAL_STUDENTS = CLASS_PLAN.reduce((sum, entry) => sum + entry.size, 0);
@@ -105,6 +154,129 @@ const TOTAL_STUDENTS = CLASS_PLAN.reduce((sum, entry) => sum + entry.size, 0);
 const SIBLING_FAMILIES = 40;
 
 const pad = (value: number, width: number): string => String(value).padStart(width, '0');
+
+
+/**
+ * Puts the school's staff in place: the director, the deputy director and the
+ * fourteen teachers named in the examination board appointment.
+ *
+ * Exported because the real-roster import needs exactly these people and none of
+ * the generated pupils that the rest of this seed creates.
+ */
+export const seedStaff = async (
+  client: PoolClient,
+  options: { yearLabel: string; startDate: string },
+): Promise<{ id: number; subjects: string[]; periods: number }[]> => {
+  const passwordHash = await hashPassword(DEFAULT_PASSWORD);
+  const { yearLabel, startDate } = options;
+
+  const ensureUser = async (username: string): Promise<number> => {
+    const email = `${username}@school.local`;
+
+    const existing = await client.query<{ id: number }>(
+      `SELECT id FROM users
+        WHERE (LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2))
+          AND deleted_at IS NULL`,
+      [username, email],
+    );
+
+    if (existing.rows[0]) {
+      return existing.rows[0].id;
+    }
+
+    const inserted = await client.query<{ id: number }>(
+      `INSERT INTO users (username, email, password_hash, status, email_verified_at)
+       VALUES ($1, $2, $3, 'ACTIVE', NOW())
+       RETURNING id`,
+      [username, email, passwordHash],
+    );
+
+    return inserted.rows[0].id;
+  };
+
+  const nextSequence = async (table: string, column: string, prefix: string): Promise<number> => {
+    const result = await client.query<{ max: number | null }>(
+      `SELECT MAX(NULLIF(regexp_replace(${column}, '^.*-', ''), '')::int) AS max
+         FROM ${table} WHERE ${column} LIKE $1`,
+      [`${prefix}%`],
+    );
+
+    return result.rows[0]?.max ?? 0;
+  };
+
+// --- Leadership ----------------------------------------------------------
+// The director and the deputy director are staff accounts, not teachers: they
+// hold no class and appear on no timetable.
+for (const leader of LEADERSHIP) {
+  const userId = await ensureUser(leader.username);
+
+  await client.query(
+    `INSERT INTO user_roles (user_id, role_id)
+     SELECT $1, id FROM roles WHERE code = $2
+     ON CONFLICT DO NOTHING`,
+    [userId, leader.role],
+  );
+}
+
+// --- Teachers ------------------------------------------------------------
+// Every member of staff is named in the examination board appointment, so
+// nothing here is generated. Each teaches the one subject they were named for.
+const teacherIds: { id: number; subjects: string[]; periods: number }[] = [];
+let teacherSeq = await nextSequence('teachers', 'teacher_code', `TCH-${yearLabel.slice(0, 4)}-`);
+
+for (const member of STAFF) {
+  const username = `${member.lastEn}.${member.firstEn}`.toLowerCase();
+  const userId = await ensureUser(username);
+
+  // A teacher record already on this login means the staff member is in place;
+  // a second run must reuse them rather than create a duplicate.
+  const existing = await client.query<{ id: number }>(
+    'SELECT id FROM teachers WHERE user_id = $1 AND deleted_at IS NULL',
+    [userId],
+  );
+
+  if (existing.rows[0]) {
+    teacherIds.push({ id: existing.rows[0].id, subjects: [member.subject], periods: 0 });
+    continue;
+  }
+
+  // Only a staff member actually being created consumes a code.
+  teacherSeq += 1;
+  const code = `TCH-${yearLabel.slice(0, 4)}-${pad(teacherSeq, 4)}`;
+
+  await client.query(
+    `INSERT INTO user_roles (user_id, role_id)
+     SELECT $1, id FROM roles WHERE code = 'TEACHER'
+     ON CONFLICT DO NOTHING`,
+    [userId],
+  );
+
+  const teacher = await client.query<{ id: number }>(
+    `INSERT INTO teachers (user_id, teacher_code, first_name_en, last_name_en,
+                           first_name_kh, last_name_kh, gender, email, specialization,
+                           hire_date, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+             (SELECT name_en FROM subjects WHERE code = $9), $10, 'ACTIVE')
+     RETURNING id`,
+    [
+      userId, code, member.firstEn, member.lastEn, member.firstKh, member.lastKh,
+      member.gender, `${username}@school.local`, member.subject, startDate,
+    ],
+  );
+
+  const teacherId = teacher.rows[0].id;
+  teacherIds.push({ id: teacherId, subjects: [member.subject], periods: 0 });
+
+  await client.query(
+    `INSERT INTO teacher_subjects (teacher_id, subject_id)
+     SELECT $1, id FROM subjects WHERE code = $2
+     ON CONFLICT DO NOTHING`,
+    [teacherId, member.subject],
+  );
+}
+
+  return teacherIds;
+};
 
 export const seedSchoolPopulation = async (client: PoolClient): Promise<void> => {
   const random = makeRandom(20262027);
@@ -133,6 +305,29 @@ export const seedSchoolPopulation = async (client: PoolClient): Promise<void> =>
   ).rows[0].start_date;
 
   /**
+   * Refuse to run twice over the same year.
+   *
+   * The staff are matched on their login and reused, but pupils have no natural
+   * key to match on — a second run would enrol another 267 children beside the
+   * first 267 and silently double the school. Better to stop and say so than to
+   * leave the office to discover it from a roll call.
+   */
+  const enrolled = await client.query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count
+       FROM enrollments
+      WHERE academic_year_id = $1 AND status = 'ACTIVE'`,
+    [academicYearId],
+  );
+
+  if (enrolled.rows[0].count > 0) {
+    throw new Error(
+      `${yearLabel} already has ${enrolled.rows[0].count} enrolled student(s), and this seed ` +
+        'would add a second intake beside them. Clear the school data first with ' +
+        '"npm run seed:reset-school -- --yes", then run this again.',
+    );
+  }
+
+  /**
    * Codes continue from whatever the school already entered by hand, so a
    * generated record never collides with a real one.
    */
@@ -146,66 +341,40 @@ export const seedSchoolPopulation = async (client: PoolClient): Promise<void> =>
     return result.rows[0]?.max ?? 0;
   };
 
-  // --- Teachers ------------------------------------------------------------
-  const teacherIds: { id: number; subjects: string[]; periods: number }[] = [];
-  let teacherSeq = await nextSequence('teachers', 'teacher_code', `TCH-${yearLabel.slice(0, 4)}-`);
+  /**
+   * Finds or creates a login.
+   *
+   * `users` is unique on `LOWER(username)` and only where `deleted_at IS NULL`,
+   * a partial expression index that `ON CONFLICT (username)` cannot infer, so
+   * the lookup is explicit. Returning an existing account rather than failing
+   * also keeps the seed re-runnable without resetting anyone's password.
+   */
+  const ensureUser = async (username: string): Promise<number> => {
+    const email = `${username}@school.local`;
 
-  for (const spec of TEACHER_SPECIALISATIONS) {
-    for (let index = 0; index < spec.count; index += 1) {
-      teacherSeq += 1;
+    const existing = await client.query<{ id: number }>(
+      `SELECT id FROM users
+        WHERE (LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2))
+          AND deleted_at IS NULL`,
+      [username, email],
+    );
 
-      const isMale = random() < 0.5;
-      const [firstEn, firstKh] = pick(isMale ? GIVEN_NAMES_MALE : GIVEN_NAMES_FEMALE);
-      const [lastEn, lastKh] = pick(FAMILY_NAMES);
-      const code = `TCH-${yearLabel.slice(0, 4)}-${pad(teacherSeq, 4)}`;
-      const username = `teacher${pad(teacherSeq, 2)}`;
-
-      const user = await client.query<{ id: number }>(
-        `INSERT INTO users (username, email, password_hash, status, email_verified_at)
-         VALUES ($1, $2, $3, 'ACTIVE', NOW())
-         ON CONFLICT DO NOTHING
-         RETURNING id`,
-        [username, `${username}@school.local`, passwordHash],
-      );
-
-      if (user.rowCount === 0) {
-        continue;
-      }
-
-      const userId = user.rows[0].id;
-
-      await client.query(
-        `INSERT INTO user_roles (user_id, role_id)
-         SELECT $1, id FROM roles WHERE code = 'TEACHER'
-         ON CONFLICT DO NOTHING`,
-        [userId],
-      );
-
-      const teacher = await client.query<{ id: number }>(
-        `INSERT INTO teachers (user_id, teacher_code, first_name_en, last_name_en,
-                               first_name_kh, last_name_kh, gender, email, specialization,
-                               hire_date, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ACTIVE')
-         RETURNING id`,
-        [
-          userId, code, firstEn, lastEn, firstKh, lastKh,
-          isMale ? 'MALE' : 'FEMALE', `${username}@school.local`, spec.label, startDate,
-        ],
-      );
-
-      const teacherId = teacher.rows[0].id;
-      teacherIds.push({ id: teacherId, subjects: spec.subjects, periods: 0 });
-
-      for (const subjectCode of spec.subjects) {
-        await client.query(
-          `INSERT INTO teacher_subjects (teacher_id, subject_id)
-           SELECT $1, id FROM subjects WHERE code = $2
-           ON CONFLICT DO NOTHING`,
-          [teacherId, subjectCode],
-        );
-      }
+    if (existing.rows[0]) {
+      return existing.rows[0].id;
     }
-  }
+
+    const inserted = await client.query<{ id: number }>(
+      `INSERT INTO users (username, email, password_hash, status, email_verified_at)
+       VALUES ($1, $2, $3, 'ACTIVE', NOW())
+       RETURNING id`,
+      [username, email, passwordHash],
+    );
+
+    return inserted.rows[0].id;
+  };
+
+  // --- Staff -----------------------------------------------------------
+  const teacherIds = await seedStaff(client, { yearLabel, startDate });
 
   // --- Classes, each in its own home room ----------------------------------
   const classIds = new Map<string, number>();
@@ -272,6 +441,37 @@ export const seedSchoolPopulation = async (client: PoolClient): Promise<void> =>
         [teacher.id, classId],
       );
     }
+  }
+
+  // --- Classes carried over from an earlier layout --------------------------
+  // The school runs 7A-7C, 8A-8C and 9A-9B. A group left over from a wider
+  // layout is archived rather than dropped, and only when nobody is still
+  // enrolled in it — an empty class is a layout change, a populated one is a
+  // transfer the office has to make deliberately.
+  const staleClasses = await client.query<{ id: number; code: string; enrolled: number }>(
+    `SELECT c.id, c.code,
+            (SELECT COUNT(*)::int FROM enrollments e
+              WHERE e.class_id = c.id AND e.status = 'ACTIVE') AS enrolled
+       FROM classes c
+      WHERE c.academic_year_id = $1
+        AND c.deleted_at IS NULL
+        AND c.code <> ALL($2::text[])`,
+    [academicYearId, CLASS_PLAN.map((plan) => plan.code)],
+  );
+
+  for (const stale of staleClasses.rows) {
+    if (stale.enrolled > 0) {
+      logger.warn(
+        `Class ${stale.code} is outside the current layout but still has ${stale.enrolled} ` +
+          'enrolled student(s), so it was kept. Transfer them, then re-run the seed.',
+      );
+      continue;
+    }
+
+    await client.query('UPDATE classes SET deleted_at = NOW(), is_active = FALSE WHERE id = $1', [
+      stale.id,
+    ]);
+    logger.info(`Archived class ${stale.code}, which is no longer part of the school`);
   }
 
   // --- Students and their enrolments ---------------------------------------
@@ -352,10 +552,13 @@ export const seedSchoolPopulation = async (client: PoolClient): Promise<void> =>
     // A father, a mother, or both: about a third of families register two.
     const guardianCount = random() < 0.35 ? 2 : 1;
 
+    // Two guardians means one of each, never two fathers.
+    const firstIsFather = random() < 0.5;
+
     for (let index = 0; index < guardianCount; index += 1) {
       parentSeq += 1;
 
-      const isFather = index === 0 ? random() < 0.5 : true;
+      const isFather = index === 0 ? firstIsFather : !firstIsFather;
       const [firstEn, firstKh] = pick(isFather ? GIVEN_NAMES_MALE : GIVEN_NAMES_FEMALE);
 
       const parent = await client.query<{ id: number }>(

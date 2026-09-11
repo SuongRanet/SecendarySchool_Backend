@@ -29,28 +29,35 @@ const makeRandom = (seed: number) => {
 /** Weekly periods per subject, the same allocation the staffing was built on. */
 const PERIODS_PER_WEEK: Record<string, number> = {
   KHM: 6, MATH: 6, ENG: 3, PHY: 2, CHEM: 2, BIO: 2,
-  EARTH: 1, HIST: 2, GEO: 2, CIVIC: 2, ICT: 2, PE: 2,
+  EARTH: 1, HIST: 2, GEO: 2, CIVIC: 2,
 };
 
 const WEEKDAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'] as const;
 
 /**
- * The daily bell. Seven periods Monday to Thursday and six on Friday give 34
- * slots a week against 32 taught periods — the slack matters, because with an
- * exactly full week a single teacher clash leaves a period with nowhere to go.
+ * The Cambodian school day: four periods in the morning and four in the
+ * afternoon, each starting on the hour and running 45 minutes, with the long
+ * midday break between 11:00 and 13:00 that the heat makes necessary.
+ *
+ * Eight slots over five days gives 40 a week against 28 taught periods. The
+ * slack is deliberate — with an exactly full week a single teacher clash leaves
+ * a period with nowhere to go.
  */
 const SLOTS: { start: string; end: string }[] = [
-  { start: '07:00', end: '07:50' },
-  { start: '07:50', end: '08:40' },
-  { start: '08:40', end: '09:30' },
-  { start: '09:45', end: '10:35' },
-  { start: '10:35', end: '11:25' },
-  { start: '13:30', end: '14:20' },
-  { start: '14:20', end: '15:10' },
+  // Morning
+  { start: '07:00', end: '07:45' },
+  { start: '08:00', end: '08:45' },
+  { start: '09:00', end: '09:45' },
+  { start: '10:00', end: '11:00' },
+  // Afternoon
+  { start: '13:00', end: '13:45' },
+  { start: '14:00', end: '14:45' },
+  { start: '15:00', end: '15:45' },
+  { start: '16:00', end: '16:45' },
 ];
 
 const PERIODS_PER_DAY: Record<string, number> = {
-  MONDAY: 7, TUESDAY: 7, WEDNESDAY: 7, THURSDAY: 7, FRIDAY: 7,
+  MONDAY: 8, TUESDAY: 8, WEDNESDAY: 8, THURSDAY: 8, FRIDAY: 8,
 };
 
 const iso = (date: Date): string => date.toISOString().slice(0, 10);
@@ -182,11 +189,12 @@ export const seedSchoolActivity = async (client: PoolClient): Promise<void> => {
   /**
    * Place the tightest teachers first.
    *
-   * A teacher who takes every class — ICT and PE each cover all eleven — needs
-   * 22 of the week's 34 slots, and can only get them while the week is still
-   * mostly empty. Filling slot by slot instead left those subjects fighting for
-   * the scraps and a handful of periods with nowhere to go, so the order here is
-   * by how much of a teacher's week each subject demands, heaviest first.
+   * Every subject is taught by one named teacher covering all eight classes, so
+   * English — three periods in each — needs 24 of the week's 40 slots, and can
+   * only get them while the week is still mostly empty. Filling slot by slot
+   * instead left the heaviest subjects fighting for the scraps and a handful of
+   * periods with nowhere to go, so the order here is by how much of a teacher's
+   * week each subject demands, heaviest first.
    */
   const pressure = new Map<number, number>();
 
@@ -211,7 +219,7 @@ export const seedSchoolActivity = async (client: PoolClient): Promise<void> => {
 
     // Every class starts scanning from a different point in the week. Without
     // the offset each class grabs Monday first, and a teacher who takes all
-    // eleven classes collides with themselves eleven times over.
+    // eight classes collides with themselves eight times over.
     const classOffset = classes.findIndex((entry) => entry.id === row.class_id) * 3;
     const week = WEEKDAYS.flatMap((day) =>
       Array.from({ length: PERIODS_PER_DAY[day] }, (_, index) => ({ day, period: index + 1 })),
