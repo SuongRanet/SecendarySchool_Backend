@@ -15,6 +15,25 @@ import routes from './routes';
 import { sendSuccess } from './utils/api-response';
 import { AppError } from './utils/app-error';
 
+// `*` in a CORS_ORIGIN entry matches one DNS label fragment, e.g. Vercel preview hashes.
+const corsOriginPatterns = env.corsOrigins
+  .filter((entry) => entry !== '*' && entry.includes('*'))
+  .map(
+    (entry) =>
+      new RegExp(
+        `^${entry
+          .split('*')
+          .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+          .join('[a-z0-9-]+')}$`,
+        'i',
+      ),
+  );
+
+const isAllowedOrigin = (origin: string): boolean =>
+  env.corsOrigins.includes('*') ||
+  env.corsOrigins.includes(origin) ||
+  corsOriginPatterns.some((pattern) => pattern.test(origin));
+
 export const createApp = (): Application => {
   const app = express();
 
@@ -28,7 +47,7 @@ export const createApp = (): Application => {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (!origin || env.corsOrigins.includes(origin) || env.corsOrigins.includes('*')) {
+        if (!origin || isAllowedOrigin(origin)) {
           callback(null, true);
           return;
         }
