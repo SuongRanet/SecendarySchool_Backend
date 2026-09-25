@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PERMISSIONS } from '../../config/permissions';
 import { authenticate, requirePermissions, validate } from '../../middleware';
 import { idParamSchema } from '../../schemas/common.schema';
+import { receivePhoto } from '../files/photo.middleware';
 import * as controller from './teacher.controller';
 import {
   assignSubjectsSchema,
@@ -102,6 +103,22 @@ router.post(
   requirePermissions(PERMISSIONS.TEACHERS_ARCHIVE),
   validate({ params: idParamSchema }),
   controller.restore,
+);
+
+// Profile photo. Validated before multer runs, so a bad id never uploads anything.
+router.put(
+  '/:id/photo',
+  requirePermissions(PERMISSIONS.TEACHERS_UPDATE),
+  validate({ params: idParamSchema }),
+  receivePhoto,
+  controller.uploadPhoto,
+);
+
+router.delete(
+  '/:id/photo',
+  requirePermissions(PERMISSIONS.TEACHERS_UPDATE),
+  validate({ params: idParamSchema }),
+  controller.removePhoto,
 );
 
 export default router;

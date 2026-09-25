@@ -54,11 +54,7 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
   const { email } = req.body as ForgotPasswordBody;
   const result = await authService.forgotPassword(email);
 
-  return sendSuccess(
-    res,
-    result,
-    'If the email is registered, a reset code has been sent',
-  );
+  return sendSuccess(res, result, 'A reset code has been sent');
 });
 
 export const verifyResetCode = asyncHandler(async (req: Request, res: Response) => {

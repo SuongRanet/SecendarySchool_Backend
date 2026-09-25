@@ -1,3 +1,5 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { env } from '../config';
@@ -12,24 +14,59 @@ import { logger } from './logger';
  * expected to configure SMTP; `env.mailEnabled` says which mode is active.
  */
 
-let transporter: Transporter | null = null;
+let transporter: { address: string; transport: Transporter } | null = null;
 
-const getTransporter = (): Transporter | null => {
+/**
+ * Resolves the SMTP host through the operating system, as a browser would.
+ *
+ * Left to itself nodemailer queries the configured DNS servers directly and
+ * only falls back to the OS resolver when that fails. Behind a local DNS proxy
+ * (a VPN, or a resolver on 127.0.0.1) those direct queries time out after about
+ * 25 seconds each, which pushed a password reset past the client's request
+ * timeout even though the mail was eventually delivered.
+ */
+const resolveSmtpHost = async (host: string): Promise<string> => {
+  if (isIP(host)) {
+    return host;
+  }
+
+  const { address } = await lookup(host);
+
+  return address;
+};
+
+const getTransporter = async (): Promise<Transporter | null> => {
   if (!env.mailEnabled) {
     return null;
   }
 
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      // Port 465 is implicit TLS; 587 upgrades with STARTTLS.
-      secure: env.SMTP_SECURE || env.SMTP_PORT === 465,
-      auth: { user: env.SMTP_USER as string, pass: env.SMTP_PASSWORD as string },
-    });
+  const host = env.SMTP_HOST as string;
+  const address = await resolveSmtpHost(host);
+
+  if (transporter?.address !== address) {
+    transporter?.transport.close();
+
+    transporter = {
+      address,
+      transport: nodemailer.createTransport({
+        host: address,
+        port: env.SMTP_PORT,
+        // Port 465 is implicit TLS; 587 upgrades with STARTTLS.
+        secure: env.SMTP_SECURE || env.SMTP_PORT === 465,
+        auth: { user: env.SMTP_USER as string, pass: env.SMTP_PASSWORD as string },
+        // Connecting by address, so the certificate is checked against the name.
+        tls: { servername: host },
+        // Fail well inside the client's 30 second request timeout rather than
+        // nodemailer's two minute default, so a dead mail server surfaces as an
+        // undelivered message instead of a hung request.
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
+      }),
+    };
   }
 
-  return transporter;
+  return transporter.transport;
 };
 
 const fromAddress = (): string => {
@@ -51,9 +88,7 @@ export interface MailMessage {
  * as `false` for the caller to react to if it cares.
  */
 export const sendMail = async (message: MailMessage): Promise<boolean> => {
-  const mail = getTransporter();
-
-  if (!mail) {
+  if (!env.mailEnabled) {
     logger.warn('SMTP is not configured; the message was logged instead of sent', {
       to: message.to,
       subject: message.subject,
@@ -64,6 +99,8 @@ export const sendMail = async (message: MailMessage): Promise<boolean> => {
   }
 
   try {
+    const mail = (await getTransporter()) as Transporter;
+
     await mail.sendMail({
       from: fromAddress(),
       to: message.to,

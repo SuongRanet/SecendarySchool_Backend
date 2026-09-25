@@ -185,18 +185,13 @@ export const logout = async (
 export const me = async (userId: number): Promise<AuthProfile> => loadProfile(userId);
 
 /**
- * Starts the password reset flow. The response is identical whether or not the
- * email exists, so the endpoint cannot confirm which addresses are registered.
- * The generated token is returned only outside production, where no mail
- * transport is configured.
- */
-/**
  * Starts a password reset.
  *
- * The reply is deliberately the same whether or not the address belongs to an
- * account: telling an anonymous caller which addresses exist would turn this
- * endpoint into a way to enumerate the school's users. The masked address in
- * the reply is derived from what the caller typed, not from the database.
+ * An address with no account is refused with `EMAIL_NOT_REGISTERED` so the
+ * person learns at once that they typed the wrong address, instead of waiting
+ * for a code that will never arrive. The trade-off is that the endpoint now
+ * confirms which addresses are registered; `authRateLimiter` on the route is
+ * what keeps that from being walked through at speed.
  */
 export const forgotPassword = async (
   email: string,
@@ -204,10 +199,12 @@ export const forgotPassword = async (
   const sentTo = maskEmail(email);
   const user = await userRepository.findUserByEmail(email);
 
-  if (!user || user.status === 'SUSPENDED') {
-    logger.info('Password reset requested for an address with no active account');
+  if (!user) {
+    throw AppError.notFound("This email isn't registered", 'EMAIL_NOT_REGISTERED');
+  }
 
-    return { sentTo };
+  if (user.status === 'SUSPENDED') {
+    throw AppError.forbidden('This account has been suspended', 'ACCOUNT_SUSPENDED');
   }
 
   const code = generateNumericCode(env.PASSWORD_RESET_CODE_LENGTH);

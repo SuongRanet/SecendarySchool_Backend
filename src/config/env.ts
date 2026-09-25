@@ -55,6 +55,12 @@ const envSchema = z.object({
   UPLOAD_DIR: z.string().default('uploads'),
   MAX_UPLOAD_MB: z.coerce.number().positive().max(50).default(10),
 
+  // Cloudinary image hosting (student and teacher photos). Optional: without
+  // all three values the Cloudinary client is left unconfigured.
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
   SEED_SUPER_ADMIN_USERNAME: z.string().default('superadmin'),
@@ -86,6 +92,10 @@ export const env = {
     ? raw.UPLOAD_DIR
     : path.resolve(process.cwd(), raw.UPLOAD_DIR),
   maxUploadBytes: Math.round(raw.MAX_UPLOAD_MB * 1024 * 1024),
+  /** True when all three Cloudinary credentials are configured. */
+  cloudinaryEnabled: Boolean(
+    raw.CLOUDINARY_CLOUD_NAME && raw.CLOUDINARY_API_KEY && raw.CLOUDINARY_API_SECRET,
+  ),
   /** CORS_ORIGIN supports a comma separated list of allowed origins. */
   corsOrigins: raw.CORS_ORIGIN.split(',')
     .map((origin) => origin.trim())

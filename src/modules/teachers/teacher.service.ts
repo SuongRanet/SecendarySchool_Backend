@@ -4,6 +4,7 @@ import { AppError } from '../../utils/app-error';
 import { buildYearPrefix, generateSequentialCode } from '../../utils/code-generator';
 import { hashPassword } from '../../utils/password';
 import * as auditService from '../audit/audit.service';
+import * as photoService from '../files/photo.service';
 import * as userRepository from '../users/user.repository';
 import * as academicYearRepository from '../academic-years/academic-year.repository';
 import * as repository from './teacher.repository';
@@ -482,6 +483,83 @@ export const restore = async (id: number, context: AuditContext): Promise<Teache
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
   });
+
+  return getById(id);
+};
+
+// ---------------------------------------------------------------------------
+// Profile photo
+// ---------------------------------------------------------------------------
+
+/**
+ * Stores a new profile photo on Cloudinary and points the teacher at it.
+ *
+ * The upload happens before the database write: if Cloudinary refuses the
+ * image the teacher keeps their old photo rather than losing it.
+ */
+export const setPhoto = async (
+  id: number,
+  photo: Buffer,
+  context: AuditContext,
+): Promise<TeacherDto> => {
+  const existing = await repository.findTeacherById(id);
+
+  if (!existing) {
+    throw AppError.notFound('Teacher not found', 'TEACHER_NOT_FOUND');
+  }
+
+  const url = await photoService.uploadPhoto('teachers', id, photo);
+
+  await withTransaction(async (client) => {
+    await repository.updateTeacher(id, { profilePhoto: url }, client);
+    await auditService.record(
+      {
+        userId: context.userId,
+        action: 'UPDATE',
+        entityType: 'teacher',
+        entityId: id,
+        description: `Changed the photo of teacher ${existing.first_name_en} ${existing.last_name_en}`,
+        oldValue: { profilePhoto: existing.profile_photo },
+        newValue: { profilePhoto: url },
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      },
+      client,
+    );
+  });
+
+  return getById(id);
+};
+
+export const removePhoto = async (id: number, context: AuditContext): Promise<TeacherDto> => {
+  const existing = await repository.findTeacherById(id);
+
+  if (!existing) {
+    throw AppError.notFound('Teacher not found', 'TEACHER_NOT_FOUND');
+  }
+
+  if (existing.profile_photo) {
+    await withTransaction(async (client) => {
+      await repository.updateTeacher(id, { profilePhoto: null }, client);
+      await auditService.record(
+        {
+          userId: context.userId,
+          action: 'UPDATE',
+          entityType: 'teacher',
+          entityId: id,
+          description: `Removed the photo of teacher ${existing.first_name_en} ${existing.last_name_en}`,
+          oldValue: { profilePhoto: existing.profile_photo },
+          newValue: { profilePhoto: null },
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        },
+        client,
+      );
+    });
+
+    // Only once the database no longer refers to it.
+    await photoService.deletePhoto('teachers', id);
+  }
 
   return getById(id);
 };

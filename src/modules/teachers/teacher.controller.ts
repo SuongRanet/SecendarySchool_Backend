@@ -151,3 +151,20 @@ export const restore = asyncHandler(async (req: Request, res: Response) => {
 
   return sendSuccess(res, restored, 'Teacher restored successfully');
 });
+
+export const uploadPhoto = asyncHandler(async (req: Request, res: Response) => {
+  // `receivePhoto` has already refused a request without a file.
+  const teacher = await service.setPhoto(
+    Number(req.params.id),
+    (req.file as Express.Multer.File).buffer,
+    getAuditContext(req),
+  );
+
+  return sendSuccess(res, teacher, 'Photo updated successfully');
+});
+
+export const removePhoto = asyncHandler(async (req: Request, res: Response) => {
+  const teacher = await service.removePhoto(Number(req.params.id), getAuditContext(req));
+
+  return sendSuccess(res, teacher, 'Photo removed successfully');
+});
