@@ -48,6 +48,10 @@ export const createApp = (): Application => {
   app.use(requestId);
   app.use(requestLogger);
 
+  app.get('/', (_req: Request, res: Response) =>
+    sendSuccess(res, { service: 'school-management-api', status: 'ok' }, 'API is running'),
+  );
+
   app.get('/health', async (_req: Request, res: Response) => {
     const databaseReachable = await checkDatabaseConnection();
 

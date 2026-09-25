@@ -16,8 +16,21 @@ types.setTypeParser(types.builtins.NUMERIC, (value: string) => Number.parseFloat
 /** `BIGINT` identifiers stay inside the safe integer range for a school dataset. */
 types.setTypeParser(types.builtins.INT8, (value: string) => Number.parseInt(value, 10));
 
+// pg lets a URL `sslmode` override the `ssl` option below (and warns about it), so strip it.
+const stripSslParams = (url: string): string => {
+  try {
+    const parsed = new URL(url);
+    for (const key of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'uselibpqcompat']) {
+      parsed.searchParams.delete(key);
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+};
+
 export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: env.DATABASE_SSL ? stripSslParams(env.DATABASE_URL) : env.DATABASE_URL,
   max: env.DATABASE_POOL_MAX,
   idleTimeoutMillis: env.DATABASE_IDLE_TIMEOUT_MS,
   connectionTimeoutMillis: env.DATABASE_CONNECTION_TIMEOUT_MS,
